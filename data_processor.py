@@ -3,8 +3,6 @@ import sqlite3
 import os
 from datetime import datetime
 from config import FILTER_CONDITIONS, SCORING_CONDITIONS, DATABASE
-from public_data_api import PublicDataCollector
-from naver_scraper import NaverPropertyScraper
 
 class PropertyDataProcessor:
     """부동산 데이터 처리 및 필터링 클래스"""
@@ -44,9 +42,10 @@ class PropertyDataProcessor:
                 naver_link TEXT,
                 data_source TEXT,
                 score INTEGER DEFAULT 0,
-                labels TEXT,
-                collected_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        labels TEXT,
+                        collected_at TIMESTAMP,
+                        raw_text TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
