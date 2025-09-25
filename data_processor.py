@@ -276,6 +276,68 @@ class PropertyDataProcessor:
         return df
 
 # 사용 예시
+    def apply_range_filters(self, df, filter_conditions):
+        """범위 필터 적용 함수"""
+        if df.empty or not filter_conditions:
+            return df
+            
+        filtered_df = df.copy()
+        
+        # 지역 필터
+        if 'districts' in filter_conditions and filter_conditions['districts']:
+            if 'district' in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df['district'].isin(filter_conditions['districts'])]
+            elif 'region' in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df['region'].isin(filter_conditions['districts'])]
+        
+        # 보증금 범위 필터
+        if 'deposit_range' in filter_conditions and 'deposit' in filtered_df.columns:
+            min_deposit, max_deposit = filter_conditions['deposit_range']
+            filtered_df = filtered_df[
+                (filtered_df['deposit'] >= min_deposit) &
+                (filtered_df['deposit'] <= max_deposit)
+            ]
+        
+        # 월세 범위 필터
+        if 'rent_range' in filter_conditions and 'monthly_rent' in filtered_df.columns:
+            min_rent, max_rent = filter_conditions['rent_range']
+            filtered_df = filtered_df[
+                (filtered_df['monthly_rent'] >= min_rent) &
+                (filtered_df['monthly_rent'] <= max_rent)
+            ]
+        
+        # 면적 범위 필터
+        if 'area_range' in filter_conditions and 'area_pyeong' in filtered_df.columns:
+            min_area, max_area = filter_conditions['area_range']
+            filtered_df = filtered_df[
+                (filtered_df['area_pyeong'] >= min_area) &
+                (filtered_df['area_pyeong'] <= max_area)
+            ]
+        
+        return filtered_df
+    
+    def apply_sorting(self, df, sort_option):
+        """정렬 적용 함수"""
+        if df.empty or not sort_option:
+            return df
+            
+        sort_mapping = {
+            "보증금 낮은순": ('deposit', True),
+            "보증금 높은순": ('deposit', False),
+            "월세 낮은순": ('monthly_rent', True),
+            "월세 높은순": ('monthly_rent', False),
+            "면적 큰순": ('area_pyeong', False),
+            "면적 작은순": ('area_pyeong', True),
+            "점수 높은순": ('score', False),
+            "등록순": (None, None)
+        }
+        
+        column, ascending = sort_mapping.get(sort_option, (None, None))
+        if column and column in df.columns:
+            return df.sort_values(column, ascending=ascending)
+        
+        return df
+
 if __name__ == "__main__":
     processor = PropertyDataProcessor()
     

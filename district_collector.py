@@ -24,7 +24,7 @@ from data_processor import PropertyDataProcessor
 class DistrictCollector:
     """🎯 메인 하이브리드 수집 시스템 오케스트레이터"""
     
-    def __init__(self):
+    def __init__(self, streamlit_params=None):
         # 모듈 초기화
         self.stealth_manager = StealthManager(pool_size=5)
         self.browser_controller = BrowserController()
@@ -32,14 +32,34 @@ class DistrictCollector:
         self.property_parser = PropertyParser()
         self.data_processor = PropertyDataProcessor()
         
-        # 수집 대상 구들
-        self.target_districts = [
-            '강남구', '강서구', '영등포구', '구로구', '마포구'
-        ]
+        # Streamlit 매개변수 적용
+        if streamlit_params:
+            self.target_districts = streamlit_params.get('districts', ['강남구'])
+            self.filter_conditions = {
+                'min_deposit': streamlit_params.get('deposit_range', (0, 10000))[0],
+                'max_deposit': streamlit_params.get('deposit_range', (0, 10000))[1],
+                'min_monthly_rent': streamlit_params.get('rent_range', (0, 1000))[0],
+                'max_monthly_rent': streamlit_params.get('rent_range', (0, 1000))[1],
+                'min_area_pyeong': streamlit_params.get('area_range', (0, 200))[0],
+                'max_area_pyeong': streamlit_params.get('area_range', (0, 200))[1]
+            }
+        else:
+            # 기본 설정
+            self.target_districts = [
+                '강남구', '강서구', '영등포구', '구로구', '마포구'
+            ]
+            self.filter_conditions = {
+                'min_deposit': 0,
+                'max_deposit': 2000,
+                'min_monthly_rent': 0,
+                'max_monthly_rent': 130,
+                'min_area_pyeong': 20,
+                'max_area_pyeong': 100
+            }
         
         # 수집 설정
         self.max_pages_per_district = 20  # 구별 최대 페이지 (400개)
-        self.total_target = len(self.target_districts) * self.max_pages_per_district * 20  # 2000개 목표
+        self.total_target = len(self.target_districts) * self.max_pages_per_district * 20  # 목표
     
     async def run_hybrid_collection(self) -> List[Dict[str, Any]]:
         """🚀 하이브리드 수집 메인 실행"""
@@ -317,6 +337,34 @@ async def run_modular_collection():
     except Exception as e:
         print(f"❌ 수집 시스템 오류: {e}")
         return []
+
+async def run_streamlit_collection(streamlit_params):
+    """🎯 Streamlit에서 호출하는 수집 함수"""
+    collector = DistrictCollector(streamlit_params=streamlit_params)
+    
+    print("🚀 === Streamlit 수집 시스템 시작 ===")
+    print(f"📍 대상 지역: {collector.target_districts}")
+    print(f"💰 보증금 범위: {collector.filter_conditions['min_deposit']}~{collector.filter_conditions['max_deposit']}만원")
+    print(f"🏠 월세 범위: {collector.filter_conditions['min_monthly_rent']}~{collector.filter_conditions['max_monthly_rent']}만원")
+    print(f"📐 면적 범위: {collector.filter_conditions['min_area_pyeong']}~{collector.filter_conditions['max_area_pyeong']}평")
+    
+    collector.stealth_manager.print_stealth_status()
+    
+    try:
+        properties = await collector.run_hybrid_collection()
+        
+        print(f"\n🎉 === Streamlit 수집 완료 ===")
+        print(f"✅ 총 {len(properties)}개 매물 수집 완료")
+        
+        return properties
+        
+    except Exception as e:
+        print(f"❌ Streamlit 수집 오류: {e}")
+        return []
+
+def run_streamlit_collection_sync(streamlit_params):
+    """🎯 Streamlit용 동기 래퍼 함수"""
+    return asyncio.run(run_streamlit_collection(streamlit_params))
 
 
 if __name__ == "__main__":
