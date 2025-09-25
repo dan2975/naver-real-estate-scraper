@@ -1,6 +1,17 @@
-# 🏢 네이버 부동산 하이브리드 수집기
+# 🏢 네이버 부동산 모듈화 하이브리드 수집기
 
-상가/사무실 매물을 대량으로 수집하는 하이브리드 스크래퍼 시스템입니다.
+상가/사무실 매물을 대량으로 수집하는 모듈화된 하이브리드 스크래퍼 시스템입니다.
+
+## 🏗️ **NEW! 완전 모듈화 구조**
+
+1,354줄 모놀리식 → **4개 독립 모듈** + **325줄 오케스트레이터**로 완전 리팩토링!
+
+### ✅ **모듈화 장점**
+- 🔧 **유지보수성**: 각 모듈 독립적 수정/테스트 가능
+- 🧪 **테스트 용이성**: 모듈별 단위 테스트 지원  
+- 📦 **재사용성**: 다른 프로젝트에서 모듈 재활용
+- 🐛 **디버깅**: 문제 발생 시 해당 모듈만 집중 분석
+- 🚀 **확장성**: 새로운 기능 모듈 쉽게 추가
 
 ## ✨ 주요 특징
 
@@ -36,24 +47,47 @@ pip install playwright requests pandas sqlite3
 playwright install chromium
 ```
 
-### 실행
+### 실행 방법
+
+#### 🆕 **모듈화 시스템 (권장)**
 ```bash
 # 가상환경 활성화
 source venv/bin/activate
 
-# 하이브리드 수집기 실행 (5개구 샘플)
-python district_button_collector.py
+# 모듈화된 하이브리드 수집기 실행
+python district_collector.py
+```
 
-# Streamlit UI로 결과 확인
+#### 📖 **기존 시스템 (비교용)**
+```bash
+# 기존 모놀리식 버전 실행
+python district_button_collector.py
+```
+
+#### 📊 **결과 확인**
+```bash
+# Streamlit UI로 수집 결과 분석
 streamlit run streamlit_property_app.py
 ```
 
-## 📁 파일 구조
+## 📁 모듈화된 파일 구조
 
-- **`district_button_collector.py`** - 메인 하이브리드 수집기
-- **`streamlit_property_app.py`** - Streamlit UI 앱
-- **`data_processor.py`** - 데이터 처리 및 저장
-- **`조건.md`** - 매물 필터링 조건 정의
+### 🆕 **모듈화 시스템**
+```
+부동산/
+├── district_collector.py          # 🎯 메인 오케스트레이터 (325줄)
+├── modules/                       # 📦 독립 모듈들
+│   ├── stealth_manager.py         # 🥷 스텔스 & 세션 관리
+│   ├── browser_controller.py      # 🌐 브라우저 제어 & 네비게이션
+│   ├── api_collector.py          # 🚀 네이버 API 수집
+│   └── property_parser.py        # 🏠 매물 파싱 & 필터링
+├── data_processor.py             # 📊 데이터 처리 & DB 저장
+├── streamlit_property_app.py     # 📱 Streamlit UI
+└── 조건.md                       # 📋 필터링 조건 정의
+```
+
+### 📖 **기존 시스템 (비교용)**
+- **`district_button_collector.py`** - 기존 모놀리식 수집기 (1,354줄)
 
 ## 🎮 실시간 로그
 
@@ -87,14 +121,34 @@ streamlit run streamlit_property_app.py
 
 ## 🔧 설정 변경
 
-`district_button_collector.py`에서 수집 설정 변경 가능:
+### 🆕 **모듈화 시스템 설정**
 
+`district_collector.py`에서 수집 설정 변경:
+```python
+# 수집할 구 리스트 (line ~12)
+self.target_districts = [
+    '강남구', '강서구', '영등포구', '구로구', '마포구'
+]
+```
+
+`modules/api_collector.py`에서 세부 설정:
+```python
+# 구별 최대 페이지 수 (페이지당 20개)
+max_pages=20  # 400개
+
+# 스텔스 모드 강도
+stealth_mode=True
+```
+
+### 📖 **기존 시스템 설정**
+
+`district_button_collector.py`에서 설정 변경:
 ```python
 # 수집할 구 리스트
 DISTRICTS = ["강남구", "강서구", "영등포구", "구로구", "마포구"]
 
-# 구별 최대 페이지 수 (페이지당 20개)
-MAX_PAGES_PER_DISTRICT = 20  # 400개
+# 구별 최대 페이지 수
+MAX_PAGES_PER_DISTRICT = 20
 ```
 
 ## ⚠️ 주의사항
