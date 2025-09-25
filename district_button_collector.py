@@ -405,7 +405,7 @@ class DistrictButtonCollector:
         
         coords = self.seoul_districts_coords[district_name]
         
-        # API 파라미터 (완화된 조건)
+        # API 파라미터 (조건.md 준수)
         params = {
             'rletTpCd': 'SG:SMS',  # 상가,사무실
             'tradTpCd': 'B2',      # 월세
@@ -416,9 +416,9 @@ class DistrictButtonCollector:
             'lft': str(coords['lft']),
             'top': str(coords['top']),
             'rgt': str(coords['rgt']),
-            'wprcMax': '5000',     # 보증금 최대 5000 (완화)
-            'rprcMax': '300',      # 월세 최대 300 (완화)
-            'spcMin': '30',        # 면적 최소 30㎡ (완화)
+            'wprcMax': '2000',     # 보증금 최대 2000 (조건.md)
+            'rprcMax': '130',      # 월세 최대 130 (조건.md)
+            'spcMin': '66',        # 면적 최소 66㎡ = 20평 (조건.md)
             'showR0': '',
             'totCnt': '7689',
             'cortarNo': ''

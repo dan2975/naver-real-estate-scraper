@@ -2,13 +2,22 @@ import pandas as pd
 import sqlite3
 import os
 from datetime import datetime
-from config import FILTER_CONDITIONS, SCORING_CONDITIONS, DATABASE
 
 class PropertyDataProcessor:
     """부동산 데이터 처리 및 필터링 클래스"""
     
     def __init__(self):
-        self.db_path = DATABASE['name']
+        # 기본 설정
+        self.db_path = 'data/properties.db'
+        self.filter_conditions = {
+            'max_deposit': 2000,      # 보증금 2000만원 이하
+            'max_monthly_rent': 130,  # 월세 130만원 이하  
+            'max_total_monthly': 150, # 총 월비용 150만원 이하
+            'min_area_pyeong': 20,    # 20평 이상
+            'min_floor': -1,          # 지하1층 이상
+            'max_floor': 2,           # 2층 이하
+            'max_management_fee': 30  # 관리비 30만원 이하
+        }
         self.ensure_data_directory()
         
     def ensure_data_directory(self):
@@ -58,32 +67,34 @@ class PropertyDataProcessor:
         
         # 보증금 필터
         if 'deposit' in filtered_df.columns:
-            filtered_df = filtered_df[filtered_df['deposit'] <= FILTER_CONDITIONS['deposit_max']]
+            filtered_df = filtered_df[filtered_df['deposit'] <= self.filter_conditions['max_deposit']]
         
         # 월세 필터
         if 'monthly_rent' in filtered_df.columns:
-            filtered_df = filtered_df[filtered_df['monthly_rent'] <= FILTER_CONDITIONS['monthly_rent_max']]
+            filtered_df = filtered_df[filtered_df['monthly_rent'] <= self.filter_conditions['max_monthly_rent']]
         
         # 관리비 포함 월세 필터
         if 'monthly_rent' in filtered_df.columns and 'management_fee' in filtered_df.columns:
             total_rent = filtered_df['monthly_rent'] + filtered_df['management_fee'].fillna(0)
-            filtered_df = filtered_df[total_rent <= FILTER_CONDITIONS['total_rent_max']]
+            filtered_df = filtered_df[total_rent <= self.filter_conditions['max_total_monthly']]
         
         # 층수 필터
         if 'floor' in filtered_df.columns:
             filtered_df = filtered_df[
-                (filtered_df['floor'] >= FILTER_CONDITIONS['floor_min']) &
-                (filtered_df['floor'] <= FILTER_CONDITIONS['floor_max'])
+                (filtered_df['floor'] >= self.filter_conditions['min_floor']) &
+                (filtered_df['floor'] <= self.filter_conditions['max_floor'])
             ]
         
         # 면적 필터
         if 'area_sqm' in filtered_df.columns:
-            filtered_df = filtered_df[filtered_df['area_sqm'] >= FILTER_CONDITIONS['area_min']]
+            # 20평 = 66㎡로 변환
+            area_pyeong = filtered_df['area_sqm'] / 3.306
+            filtered_df = filtered_df[area_pyeong >= self.filter_conditions['min_area_pyeong']]
         
         # 관리비 필터
         if 'management_fee' in filtered_df.columns:
             filtered_df = filtered_df[
-                filtered_df['management_fee'].fillna(0) <= FILTER_CONDITIONS['management_fee_max']
+                filtered_df['management_fee'].fillna(0) <= self.filter_conditions['max_management_fee']
             ]
         
         return filtered_df
@@ -95,18 +106,18 @@ class PropertyDataProcessor:
         
         # 층고 점수
         if 'ceiling_height' in df.columns:
-            ceiling_condition = df['ceiling_height'] >= SCORING_CONDITIONS['ceiling_height']['threshold']
-            df.loc[ceiling_condition, 'score'] += SCORING_CONDITIONS['ceiling_height']['score']
+            ceiling_condition = df['ceiling_height'] >= 2.8
+            df.loc[ceiling_condition, 'score'] += 1
         
         # 역세권 점수
         if 'near_station' in df.columns:
             station_condition = df['near_station'] == True
-            df.loc[station_condition, 'score'] += SCORING_CONDITIONS['near_station']['score']
+            df.loc[station_condition, 'score'] += 2
         
         # 주차 점수 (가장 중요)
         if 'parking_available' in df.columns:
             parking_condition = df['parking_available'] == True
-            df.loc[parking_condition, 'score'] += SCORING_CONDITIONS['parking']['score']
+            df.loc[parking_condition, 'score'] += 3
         
         return df
     
@@ -120,7 +131,7 @@ class PropertyDataProcessor:
             
             # 층고 라벨
             if 'ceiling_height' in row and pd.notna(row['ceiling_height']):
-                if row['ceiling_height'] >= SCORING_CONDITIONS['ceiling_height']['threshold']:
+                if row['ceiling_height'] >= 2.8:
                     row_labels.append(f"층고 {row['ceiling_height']:.1f}m ⭐")
             
             # 역세권 라벨
