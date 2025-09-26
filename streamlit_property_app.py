@@ -309,7 +309,6 @@ def tab_collection():
         if st.button(
             "🚀 수집 시작", 
             type="primary", 
-            use_container_width=True,
             disabled=not conditions_valid
         ):
             st.session_state.collection_started = True
@@ -377,7 +376,7 @@ def tab_advanced_collection():
         st.write("- Phase 3: 고급 분석 (1주)")
     
     # 플레이스홀더 버튼
-    st.button("🚧 준비 중...", disabled=True, use_container_width=True)
+    st.button("🚧 준비 중...", disabled=True)
 
 def tab_results():
     """Tab 3: 📊 결과"""
@@ -496,7 +495,7 @@ def tab_results():
         # 데이터프레임 표시
         st.dataframe(
             sorted_df[display_columns], 
-            use_container_width=True,
+            width='stretch',
             column_config=column_config
         )
         
@@ -566,7 +565,7 @@ def tab_statistics():
                 title="📍 지역별 매물 수",
                 labels={'x': '매물 수', 'y': '지역'}
             )
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, width='stretch')
         
     with col2:
         # 가격 분포
@@ -580,7 +579,7 @@ def tab_statistics():
                 title="💰 보증금 vs 월세 분포",
                 labels={'deposit': '보증금(만원)', 'monthly_rent': '월세(만원)'}
             )
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width='stretch')
     
     # 하단 차트
     col1, col2 = st.columns(2)
@@ -594,8 +593,8 @@ def tab_statistics():
                 y='area_pyeong',
                 title="📐 지역별 면적 분포"
             )
-            fig3.update_xaxis(tickangle=45)
-            st.plotly_chart(fig3, use_container_width=True)
+            fig3.update_xaxes(tickangle=45)
+            st.plotly_chart(fig3, width='stretch')
         
     with col2:
         # 조건 부합률
@@ -605,7 +604,7 @@ def tab_statistics():
             names=list(compliance_data.keys()),
             title="🎯 조건.md 부합률"
         )
-        st.plotly_chart(fig4, use_container_width=True)
+        st.plotly_chart(fig4, width='stretch')
 
 def main():
     """메인 함수"""
