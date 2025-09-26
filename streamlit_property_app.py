@@ -222,7 +222,7 @@ def tab_collection():
             '용산구', '은평구', '종로구', '중구', '중랑구'
         ]
         
-        # 선택 버튼들
+        # 전체 선택/해제 버튼
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🗺️ 전체 구 선택", key="select_all_districts"):
@@ -230,15 +230,6 @@ def tab_collection():
         with col2:
             if st.button("❌ 전체 해제", key="clear_all_districts"):
                 st.session_state.selected_districts = []
-        
-        # 프리셋 선택
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🏢 강남권 (5개구)", key="select_gangnam"):
-                st.session_state.selected_districts = ['강남구', '서초구', '송파구', '강동구', '용산구']
-        with col2:
-            if st.button("💼 비즈니스구 (6개구)", key="select_business"):
-                st.session_state.selected_districts = ['강남구', '서초구', '중구', '종로구', '영등포구', '마포구']
         
         # 세션 상태에서 선택된 구 가져오기
         if 'selected_districts' not in st.session_state:
