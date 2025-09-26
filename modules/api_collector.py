@@ -105,6 +105,16 @@ class APICollector:
                 
                 if response.status_code == 200:
                     data = response.json()
+                    
+                    # 총 매물 수 확인 (첫 페이지에서)
+                    if current_page == 1:
+                        total_count = data.get('data', {}).get('totCnt', 0)
+                        if total_count:
+                            self._total_count = total_count
+                            print(f"                  📊 총 {total_count}개 매물 확인됨", flush=True)
+                        else:
+                            self._total_count = None
+                    
                     # 기존 시스템과 동일한 응답 처리
                     if 'body' in data and isinstance(data['body'], list):
                         articles = data['body']
@@ -125,6 +135,11 @@ class APICollector:
                         print(f"                  ✅ {processed_count}개 처리 완료 (누적: {len(all_properties)}개)", flush=True)
                         consecutive_failures = 0
                         
+                        # 총 매물 수 도달 확인
+                        if hasattr(self, '_total_count') and len(all_properties) >= self._total_count:
+                            print(f"                  🎯 전체 매물 수집 완료: {len(all_properties)}/{self._total_count}개", flush=True)
+                            break
+                        
                         # 5페이지마다 긴 휴식
                         if current_page % 5 == 0:
                             rest_time = self.stealth_manager.get_human_wait_time(long_wait=True)
@@ -133,9 +148,19 @@ class APICollector:
                     else:
                         print(f"                  ⚠️ {current_page}페이지: 매물 없음", flush=True)
                         consecutive_failures += 1
+                        
+                        # 연속 3페이지 매물 없으면 수집 종료
+                        if consecutive_failures >= 3:
+                            print(f"                  🛑 연속 {consecutive_failures}페이지 매물 없음 → 수집 종료", flush=True)
+                            break
                 else:
                     print(f"                  ❌ {current_page}페이지: HTTP {response.status_code}", flush=True)
                     consecutive_failures += 1
+                    
+                    # 연속 5페이지 HTTP 오류시 수집 종료
+                    if consecutive_failures >= 5:
+                        print(f"                  🛑 연속 {consecutive_failures}페이지 오류 → 수집 종료", flush=True)
+                        break
                 
                 current_page += 1
                 
