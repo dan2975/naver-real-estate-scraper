@@ -172,11 +172,11 @@ class PropertyParser:
                 floor_num = int(single_match.group(1))
                 return f"{floor_num}층", floor_num
             
-            return "정보없음", 0
+            return "정보없음", None
             
         except Exception as e:
             print(f"⚠️ 층수 파싱 오류: {e}")
-            return "정보없음", 0
+            return "정보없음", None
     
     def check_conditions_compliance(self, property_data: Dict[str, Any]) -> Dict[str, Any]:
         """🎯 조건.md 부합 여부 검사"""
@@ -208,13 +208,17 @@ class PropertyParser:
                 compliance['failed_conditions'].append('면적')
                 compliance['condition_details']['area'] = f"{area_pyeong}평 < {self.conditions['min_area_pyeong']}평"
             
-            # 층수 체크 (있는 경우만)
+            # 층수 체크 (있는 경우만, NoneType 안전 처리)
             floor_number = property_data.get('floor_number')
-            if floor_number is not None:
-                if floor_number < self.conditions['min_floor'] or floor_number > self.conditions['max_floor']:
-                    compliance['meets_all_conditions'] = False
-                    compliance['failed_conditions'].append('층수')
-                    compliance['condition_details']['floor'] = f"{floor_number}층 (범위: {self.conditions['min_floor']}~{self.conditions['max_floor']}층)"
+            if floor_number is not None and isinstance(floor_number, (int, float)):
+                try:
+                    if floor_number < self.conditions['min_floor'] or floor_number > self.conditions['max_floor']:
+                        compliance['meets_all_conditions'] = False
+                        compliance['failed_conditions'].append('층수')
+                        compliance['condition_details']['floor'] = f"{floor_number}층 (범위: {self.conditions['min_floor']}~{self.conditions['max_floor']}층)"
+                except (TypeError, ValueError) as e:
+                    print(f"            ⚠️ 층수 비교 오류: floor_number={floor_number}, type={type(floor_number)}, error={e}")
+                    # 층수 정보가 잘못된 경우 조건 실패로 처리하지 않음 (무시)
             
             # 총 월비용 체크 (월세 + 관리비)
             management_fee = property_data.get('management_fee', 0)
@@ -252,12 +256,14 @@ class PropertyParser:
                     enhanced['area_m2'] = area_m2
                     enhanced['area_pyeong'] = area_pyeong
             
-            # 층수 정보가 없으면 텍스트에서 추출 시도
+            # 층수 정보가 없으면 텍스트에서 추출 시도 (기존 floor_number 보존)
             if not enhanced.get('floor_info') and raw_text:
                 floor_info, floor_number = self.parse_floor_from_text(raw_text)
                 if floor_info != "정보없음":
                     enhanced['floor_info'] = floor_info
-                    enhanced['floor_number'] = floor_number
+                    # 기존 floor_number가 없고, 새로 파싱한 값이 유효할 때만 설정
+                    if enhanced.get('floor_number') is None and floor_number is not None:
+                        enhanced['floor_number'] = floor_number
             
             # 조건 부합 여부 검사
             compliance = self.check_conditions_compliance(enhanced)

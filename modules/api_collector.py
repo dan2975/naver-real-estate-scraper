@@ -260,19 +260,22 @@ class APICollector:
             
             # 층수 정보 추출 (NoneType 오류 방지)
             floor_number = None
-            if isinstance(flr_info, str):
+            if isinstance(flr_info, str) and flr_info.strip():
                 try:
                     # "3/10층" 형태에서 현재 층수 추출
                     if '/' in flr_info:
                         current_floor_str = flr_info.split('/')[0].strip()
-                        if current_floor_str.startswith('B'):
+                        if current_floor_str.startswith('B') and len(current_floor_str) > 1:
                             # 지하층 처리 (B1 = -1)
-                            floor_number = -int(current_floor_str[1:])
-                        else:
+                            basement_num = current_floor_str[1:]
+                            if basement_num.isdigit():
+                                floor_number = -int(basement_num)
+                        elif current_floor_str.isdigit():
                             floor_number = int(current_floor_str)
-                    elif flr_info.replace('층', '').isdigit():
-                        floor_number = int(flr_info.replace('층', ''))
-                except (ValueError, IndexError):
+                    elif flr_info.replace('층', '').strip().isdigit():
+                        floor_number = int(flr_info.replace('층', '').strip())
+                except (ValueError, IndexError, AttributeError) as e:
+                    print(f"            ⚠️ 층수 파싱 실패: '{flr_info}' -> {e}")
                     floor_number = None
             
             return {
