@@ -118,10 +118,13 @@ class APICollector:
         self.stealth_manager.set_persona(self.stealth_manager.get_random_persona())
         
         while current_page <= max_pages and consecutive_failures < max_failures:
-            # 중지 요청 확인
-            if self.progress_manager.is_stop_requested():
-                print(f"                  🛑 수집 중지 요청 감지 → 중단 (페이지 {current_page})", flush=True)
-                break
+            # 중지 요청 확인 (안전 처리)
+            try:
+                if self.progress_manager.is_stop_requested():
+                    print(f"                  🛑 수집 중지 요청 감지 → 중단 (페이지 {current_page})", flush=True)
+                    break
+            except:
+                pass
                 
             try:
                 print(f"               📄 {current_page}페이지 (스텔스 모드)...", flush=True)
@@ -150,8 +153,11 @@ class APICollector:
                         if total_count:
                             self._total_count = total_count
                             print(f"                  📊 총 {total_count}개 매물 확인됨", flush=True)
-                            # 진행률 관리자에 총 개수 업데이트
-                            self.progress_manager.update_page_progress(current_page, 0, total_count)
+                            # 진행률 관리자에 총 개수 업데이트 (안전 처리)
+                            try:
+                                self.progress_manager.update_page_progress(current_page, 0, total_count)
+                            except:
+                                pass
                         else:
                             self._total_count = None
                     
@@ -179,8 +185,11 @@ class APICollector:
                         print(f"                  ✅ {processed_count}개 처리 완료 (누적: {len(all_properties)}개)", flush=True)
                         consecutive_failures = 0
                         
-                        # 진행률 업데이트
-                        self.progress_manager.update_page_progress(current_page, processed_count)
+                        # 진행률 업데이트 (안전 처리)
+                        try:
+                            self.progress_manager.update_page_progress(current_page, processed_count)
+                        except:
+                            pass
                         
                         # 총 매물 수 도달 확인
                         if hasattr(self, '_total_count') and len(all_properties) >= self._total_count:
@@ -228,7 +237,7 @@ class APICollector:
         return all_properties
     
     def process_api_property(self, prop, district_name: str) -> Optional[Dict[str, Any]]:
-        """🏠 API 매물 데이터 처리 (안전한 버전)"""
+        """🏠 API 매물 데이터 처리 (기존 시스템과 동일)"""
         try:
             # 매물 링크 생성
             atcl_no = prop.get('atclNo', '') if isinstance(prop, dict) else ''

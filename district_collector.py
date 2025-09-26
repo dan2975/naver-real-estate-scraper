@@ -51,7 +51,7 @@ class DistrictCollector:
             }
             print(f"         🎯 Streamlit 필터 전달: {streamlit_filters}")
         
-        self.api_collector = APICollector(self.stealth_manager, streamlit_filters)
+        self.api_collector = APICollector(self.stealth_manager)
         self.property_parser = PropertyParser(streamlit_filters)
         self.data_processor = PropertyDataProcessor()
         self.progress_manager = get_progress_manager()
