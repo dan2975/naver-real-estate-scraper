@@ -44,9 +44,10 @@ class DistrictCollector:
                 'max_area_pyeong': streamlit_params.get('area_range', (0, 200))[1]
             }
         else:
-            # 기본 설정
+            # 기본 설정 (수집량이 많은 주요 구들)
             self.target_districts = [
-                '강남구', '강서구', '영등포구', '구로구', '마포구'
+                '강남구', '강서구', '영등포구', '구로구', '마포구',
+                '서초구', '송파구', '용산구', '중구', '종로구'
             ]
             self.filter_conditions = {
                 'min_deposit': 0,
