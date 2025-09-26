@@ -164,13 +164,17 @@ class APICollector:
                     if articles:
                         print(f"                  ✅ {len(articles)}개 원시 데이터", flush=True)
                         
-                        # 매물 처리
+                        # 매물 처리 (안전한 처리)
                         processed_count = 0
                         for article in articles:
-                            processed_property = self.process_api_property(article, district_name)
-                            if processed_property:
-                                all_properties.append(processed_property)
-                                processed_count += 1
+                            try:
+                                processed_property = self.process_api_property(article, district_name)
+                                if processed_property:
+                                    all_properties.append(processed_property)
+                                    processed_count += 1
+                            except Exception as prop_error:
+                                print(f"                     ⚠️ 매물 처리 오류 (건너뜀): {prop_error}", flush=True)
+                                continue
                         
                         print(f"                  ✅ {processed_count}개 처리 완료 (누적: {len(all_properties)}개)", flush=True)
                         consecutive_failures = 0
@@ -208,7 +212,9 @@ class APICollector:
                 current_page += 1
                 
             except Exception as e:
+                import traceback
                 print(f"                  ❌ {current_page}페이지 수집 오류: {e}", flush=True)
+                print(f"                  🔍 상세 오류: {traceback.format_exc()}", flush=True)
                 consecutive_failures += 1
                 current_page += 1
                 
@@ -222,7 +228,7 @@ class APICollector:
         return all_properties
     
     def process_api_property(self, prop, district_name: str) -> Optional[Dict[str, Any]]:
-        """🏠 API 매물 데이터 처리 (기존 시스템과 동일)"""
+        """🏠 API 매물 데이터 처리 (안전한 버전)"""
         try:
             # 매물 링크 생성
             atcl_no = prop.get('atclNo', '') if isinstance(prop, dict) else ''
