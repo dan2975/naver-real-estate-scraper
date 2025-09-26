@@ -107,6 +107,11 @@ class DistrictCollector:
             
             try:
                 for i, district_name in enumerate(self.target_districts, 1):
+                    # 중지 요청 확인
+                    if self.progress_manager.is_stop_requested():
+                        print(f"\n🛑 수집 중지 요청으로 인해 {district_name} 수집을 건너뜁니다.")
+                        break
+                        
                     print(f"\n📍 {i}/{len(self.target_districts)}: {district_name} 하이브리드 수집")
                     
                     # 진행률 업데이트: 구별 시작
@@ -147,8 +152,12 @@ class DistrictCollector:
         # 4단계: 최종 결과 분석 및 저장
         await self.finalize_results(all_properties)
         
-        # 진행률 완료
-        self.progress_manager.complete_collection(len(all_properties), success=True)
+        # 중지 요청 확인 후 완료 처리
+        if self.progress_manager.is_stop_requested():
+            self.progress_manager.complete_collection(len(all_properties), success=False)
+            print(f"\n🛑 사용자 요청으로 수집이 중지되었습니다. 총 {len(all_properties)}개 매물 수집됨")
+        else:
+            self.progress_manager.complete_collection(len(all_properties), success=True)
         
         return all_properties
     

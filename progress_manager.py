@@ -101,7 +101,8 @@ class ProgressManager:
             "errors": [],
             "completed_districts": [],
             "current_district_properties": 0,
-            "estimated_completion": None
+            "estimated_completion": None,
+            "stop_requested": False  # 중지 요청 플래그 초기화
         }
         
         return self._write_progress_safe(data)
@@ -166,14 +167,27 @@ class ProgressManager:
         """전체 수집 완료"""
         data = self._read_progress_safe()
         data.update({
-            "status": "completed" if success else "failed",
+            "status": "completed" if success else "cancelled",
             "progress_percent": 100,
-            "current_step": f"수집 완료! 총 {total_collected}개 매물" if success else "수집 실패",
+            "current_step": f"수집 완료! 총 {total_collected}개 매물" if success else "수집 중지됨",
             "current_properties_collected": total_collected,
             "estimated_completion": datetime.now().isoformat()
         })
         
         return self._write_progress_safe(data)
+    
+    def request_stop(self):
+        """수집 중지 요청"""
+        data = self._read_progress_safe()
+        data["stop_requested"] = True
+        data["current_step"] = "수집 중지 요청됨..."
+        
+        return self._write_progress_safe(data)
+    
+    def is_stop_requested(self) -> bool:
+        """수집 중지 요청 여부 확인"""
+        data = self._read_progress_safe()
+        return data.get("stop_requested", False)
     
     def add_error(self, error_message: str):
         """오류 추가"""

@@ -466,11 +466,10 @@ def tab_collection():
             # 수집 중지 버튼
             if current_progress.get('status') == 'running':
                 if st.button("🛑 수집 중지", type="secondary"):
-                    progress_manager.complete_collection(
-                        current_progress.get('current_properties_collected', 0), 
-                        success=False
-                    )
+                    # 중지 요청 전송
+                    progress_manager.request_stop()
                     st.session_state.collection_started = False
+                    st.success("🛑 수집 중지 요청을 전송했습니다. 잠시 후 중지됩니다...")
                     st.rerun()
                     
         else:

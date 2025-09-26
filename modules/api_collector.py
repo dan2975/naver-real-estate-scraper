@@ -118,6 +118,11 @@ class APICollector:
         self.stealth_manager.set_persona(self.stealth_manager.get_random_persona())
         
         while current_page <= max_pages and consecutive_failures < max_failures:
+            # 중지 요청 확인
+            if self.progress_manager.is_stop_requested():
+                print(f"                  🛑 수집 중지 요청 감지 → 중단 (페이지 {current_page})", flush=True)
+                break
+                
             try:
                 print(f"               📄 {current_page}페이지 (스텔스 모드)...", flush=True)
                 
