@@ -403,9 +403,26 @@ def tab_collection():
                     except:
                         st.caption("마지막 업데이트: 알 수 없음")
             
-            # 메인 진행률 바
+            # 메인 진행률 바 (브라우저 기준)
             progress_percent = current_progress.get('progress_percent', 0)
-            st.progress(progress_percent / 100, text=f"전체 진행률: {progress_percent:.1f}%")
+            current_collected = current_progress.get('current_district_properties', 0)
+            browser_totals = current_progress.get('browser_totals', {})
+            current_district = current_progress.get('current_district', '')
+            browser_total = browser_totals.get(current_district, 0)
+            
+            # 브라우저 총 매물 수가 있으면 실시간 재계산
+            if browser_total > 0 and current_collected > 0:
+                real_progress = min((current_collected / browser_total) * 100, 100)
+                st.progress(real_progress / 100, text=f"전체 진행률: {real_progress:.1f}% ({current_collected}/{browser_total}개)")
+                
+                # 중복 통계 표시
+                if current_collected > browser_total:
+                    duplicate_count = current_collected - browser_total
+                    efficiency = (browser_total / current_collected) * 100 if current_collected > 0 else 0
+                    st.info(f"📊 중복 제거: {duplicate_count}개 중복 감지됨 (효율성: {efficiency:.1f}%)")
+                    st.caption(f"✅ 유니크 매물: {browser_total}개 / 전체 수집: {current_collected}개")
+            else:
+                st.progress(progress_percent / 100, text=f"전체 진행률: {progress_percent:.1f}%")
             
             # 상세 진행 정보
             col2_1, col2_2 = st.columns(2)
@@ -424,11 +441,19 @@ def tab_collection():
                 )
             
             with col2_2:
-                st.metric(
-                    "🏠 수집된 매물",
-                    f"{current_progress.get('current_properties_collected', 0):,}개",
-                    f"목표: {current_progress.get('total_properties_target', 0):,}개"
-                )
+                # 브라우저 감지 총 매물 수 기준으로 표시
+                if browser_total > 0:
+                    st.metric(
+                        "🏠 수집된 매물", 
+                        f"{current_collected:,}개",
+                        f"목표: {browser_total:,}개"
+                    )
+                else:
+                    st.metric(
+                        "🏠 수집된 매물",
+                        f"{current_progress.get('current_properties_collected', 0):,}개",
+                        f"목표: {current_progress.get('total_properties_target', 0):,}개"
+                    )
                 
                 # 예상 완료 시간
                 remaining = current_progress.get('estimated_remaining_seconds')
@@ -630,7 +655,7 @@ def tab_results():
         # 데이터프레임 표시
         st.dataframe(
             sorted_df[display_columns], 
-            width='stretch',
+            width="stretch",
             column_config=column_config
         )
         

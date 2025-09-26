@@ -36,26 +36,21 @@ class StealthManager:
         self.session_usage_count = {}
         self.max_session_usage = 50  # 세션당 최대 사용 횟수
         
-        # 페르소나별 행동 패턴
+        # 페르소나별 행동 패턴 (신중한사용자 제거)
         self.personas = {
             '부동산전문가': {
-                'speed_multiplier': 0.9,  # 빠른 탐색
-                'wait_range': (0.5, 3.0),
-                'long_wait_range': (5.0, 15.0)
+                'speed_multiplier': 0.8,  # 빠른 탐색
+                'wait_range': (0.5, 2.5),
+                'long_wait_range': (3.0, 10.0)
             },
             '일반사용자': {
-                'speed_multiplier': 1.0,  # 보통 속도
-                'wait_range': (1.0, 5.0),
-                'long_wait_range': (5.0, 20.0)
-            },
-            '신중한사용자': {
-                'speed_multiplier': 1.2,  # 느린 탐색
-                'wait_range': (2.0, 8.0),
-                'long_wait_range': (10.0, 30.0)
+                'speed_multiplier': 1.0,  # 보통 속도  
+                'wait_range': (1.0, 4.0),
+                'long_wait_range': (5.0, 15.0)
             }
         }
         
-        self.current_persona = '일반사용자'
+        self.current_persona = '부동산전문가'  # 기본값을 빠른 패턴으로 설정
         
         # 초기화
         self.create_stealth_session_pool()
@@ -133,8 +128,10 @@ class StealthManager:
             print(f"⚠️ 알 수 없는 페르소나: {persona}")
     
     def get_random_persona(self) -> str:
-        """🎲 랜덤 페르소나 선택"""
-        return random.choice(list(self.personas.keys()))
+        """🎲 랜덤 페르소나 선택 (빠른 패턴 선호)"""
+        # 가중치: 부동산전문가 70%, 일반사용자 30%
+        personas = ['부동산전문가'] * 7 + ['일반사용자'] * 3
+        return random.choice(personas)
     
     def wait_with_message(self, wait_time: float, message: str = "") -> None:
         """⏳ 메시지와 함께 대기"""

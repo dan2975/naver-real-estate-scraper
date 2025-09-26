@@ -129,23 +129,48 @@ class ProgressManager:
         data = self._read_progress_safe()
         data.update({
             "current_page": current_page,
-            "current_step": f"{data['current_district']} - {current_page}페이지 수집 중",
-            "current_district_properties": data["current_district_properties"] + properties_in_page,
-            "current_properties_collected": data["current_properties_collected"] + properties_in_page
+            "current_properties_collected": data.get("current_properties_collected", 0) + properties_in_page,
+            "current_district_properties": data.get("current_district_properties", 0) + properties_in_page,
+            "last_update": datetime.now().isoformat()
         })
         
-        # 총 매물 수가 확인된 경우
-        if total_properties_found:
-            data["total_properties_target"] = total_properties_found
-        
-        # 세밀한 진행률 계산
-        if data["total_properties_target"] > 0:
-            property_progress = (data["current_properties_collected"] / data["total_properties_target"]) * 90
-            district_base_progress = (data["district_index"] / data["total_districts"]) * 90
-            page_progress = (current_page / 200) * (90 / data["total_districts"])  # 구별 최대 진행률
+        # 브라우저에서 감지한 총 매물 수가 있으면 더 정확한 진행률 계산
+        if total_properties_found and total_properties_found > 0:
+            current_collected = data["current_district_properties"]
+            district_progress = min((current_collected / total_properties_found) * 100, 99)
+            print(f"                  📊 정확한 진행률: {current_collected}/{total_properties_found}개 ({district_progress:.1f}%)")
             
-            data["progress_percent"] = min(district_base_progress + page_progress, 95)
+            # 🎯 브라우저 기준 진행률을 메인 진행률로 사용
+            data["progress_percent"] = district_progress
+        else:
+            # 브라우저 총 매물 수를 저장된 데이터에서 확인
+            browser_totals = data.get("browser_totals", {})
+            current_district = data.get("current_district", "")
+            browser_total = browser_totals.get(current_district, 0)
+            
+            if browser_total > 0:
+                current_collected = data["current_district_properties"]
+                district_progress = min((current_collected / browser_total) * 100, 99)
+                print(f"                  📊 저장된 브라우저 총 매물 수 기준 진행률: {current_collected}/{browser_total}개 ({district_progress:.1f}%)")
+                data["progress_percent"] = district_progress
+            else:
+                # 폴백: 기존 방식
+                if data["total_properties_target"] > 0:
+                    overall_progress = min((data["current_properties_collected"] / data["total_properties_target"]) * 90, 90)
+                    data["progress_percent"] = overall_progress
         
+        return self._write_progress_safe(data)
+    
+    def set_district_browser_total(self, district_name: str, browser_total: int):
+        """브라우저에서 감지한 구별 총 매물 수 설정"""
+        data = self._read_progress_safe()
+        if "browser_totals" not in data:
+            data["browser_totals"] = {}
+        
+        data["browser_totals"][district_name] = browser_total
+        data["current_step"] = f"{district_name} 브라우저 감지: {browser_total}개 매물"
+        
+        print(f"                  🎯 진행률 관리자: {district_name} 총 {browser_total}개 설정")
         return self._write_progress_safe(data)
     
     def update_district_complete(self, district_name: str, properties_collected: int):
@@ -200,8 +225,18 @@ class ProgressManager:
         return self._write_progress_safe(data)
     
     def get_progress(self) -> Dict[str, Any]:
-        """현재 진행률 조회"""
-        data = self._read_progress_safe()
+        """현재 진행률 조회 (최신 데이터 보장)"""
+        # 파일을 직접 읽어서 캐시 무효화
+        try:
+            if os.path.exists(self.progress_file):
+                with open(self.progress_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    print(f"🔍 진행률 파일 직접 읽기: progress_percent={data.get('progress_percent', 0)}")
+            else:
+                data = self._get_default_progress()
+        except Exception as e:
+            print(f"⚠️ 진행률 파일 읽기 오류: {e}")
+            data = self._read_progress_safe()
         
         # 추가 계산된 정보
         if data.get("start_time") and data["status"] == "running":

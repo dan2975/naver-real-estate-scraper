@@ -33,6 +33,10 @@ class APICollector:
         self.progress_manager = get_progress_manager()
         self.streamlit_filters = streamlit_filters or {}
         
+        # 🎯 중복 감지 시스템
+        self.collected_article_ids = set()  # 이미 수집된 article_no 저장
+        self.duplicate_count = 0            # 중복 발견 카운터
+        
         # 동적 API 파라미터 (Streamlit 필터 반영)
         self.base_api_params = self._build_api_params_from_filters()
     
@@ -100,6 +104,11 @@ class APICollector:
             if 'browser_total_count' in api_params:
                 self._browser_total_count = api_params['browser_total_count']
                 print(f"            🎯 브라우저 총 매물 수 설정: {self._browser_total_count}개")
+                # 진행률 관리자에도 전달
+                try:
+                    self.progress_manager.set_district_browser_total(district_name, self._browser_total_count)
+                except:
+                    pass
         else:
             # 폴백: 기존 하드코딩 좌표 사용
             print(f"            ⚠️ 브라우저 파라미터 없음, 기본 좌표 사용")
@@ -230,19 +239,32 @@ class APICollector:
                                 print(f"                     ⚠️ 매물 처리 오류 (건너뜀): {prop_error}", flush=True)
                                 continue
                         
-                        print(f"                  ✅ {processed_count}개 처리 완료 (누적: {len(all_properties)}개)", flush=True)
+                        unique_count = len(self.collected_article_ids)
+                        print(f"                  ✅ {processed_count}개 처리 완료 (누적: {len(all_properties)}개, 유니크: {unique_count}개)", flush=True)
+                        if self.duplicate_count > 0:
+                            print(f"                  📊 중복 통계: {self.duplicate_count}개 중복 감지됨", flush=True)
                         consecutive_failures = 0
                         
                         # 진행률 업데이트 (안전 처리)
                         try:
-                            self.progress_manager.update_page_progress(current_page, processed_count)
+                            browser_total = getattr(self, '_browser_total_count', None)
+                            self.progress_manager.update_page_progress(current_page, processed_count, browser_total)
                         except:
                             pass
                         
                         # 수집 종료 조건 확인
                         more_value = data.get('more', 'unknown')
+                        unique_count = len(self.collected_article_ids)
+                        
+                        # 🎯 브라우저 감지 수 기준 종료 조건
+                        browser_total = getattr(self, '_browser_total_count', None)
+                        if browser_total and unique_count >= browser_total:
+                            print(f"                  🎯 브라우저 정확한 매물 수 도달: {unique_count}/{browser_total}개", flush=True)
+                            print(f"                  ✅ 브라우저-API 동기화 완료! (+{len(all_properties) - browser_total}개 차이)", flush=True)
+                            break
+                        
                         if hasattr(self, '_total_count'):
-                            print(f"                  🔍 디버그: _total_count={self._total_count}, 현재={len(all_properties)}개, more={more_value}", flush=True)
+                            print(f"                  🔍 디버그: _total_count={self._total_count}, 현재={len(all_properties)}개, 유니크={unique_count}개, more={more_value}", flush=True)
                             if self._total_count is not None and len(all_properties) >= self._total_count:
                                 print(f"                  🎯 전체 매물 수집 완료: {len(all_properties)}/{self._total_count}개", flush=True)
                                 break
@@ -259,9 +281,17 @@ class APICollector:
                         
                         # 🎯 순수 브라우저 감지 시스템 (하드코딩 완전 제거)
                         if hasattr(self, '_browser_total_count') and self._browser_total_count:
+                            # 정확히 브라우저 매물 수에 도달하거나 1-2개 차이 허용
                             if len(all_properties) >= self._browser_total_count:
-                                print(f"                  🎯 브라우저 정확한 매물 수 도달: {len(all_properties)}/{self._browser_total_count}개", flush=True)
-                                print(f"                  ✅ 완벽한 브라우저-API 동기화 달성!", flush=True)
+                                actual_collected = len(all_properties)
+                                target_count = self._browser_total_count
+                                difference = actual_collected - target_count
+                                
+                                print(f"                  🎯 브라우저 정확한 매물 수 도달: {actual_collected}/{target_count}개", flush=True)
+                                if difference == 0:
+                                    print(f"                  ✅ 완벽한 브라우저-API 동기화 달성! (정확히 일치)", flush=True)
+                                else:
+                                    print(f"                  ✅ 브라우저-API 동기화 완료! ({difference:+d}개 차이)", flush=True)
                                 break
                         else:
                             # 브라우저 매물 수를 감지하지 못한 경우에만 경고
@@ -310,17 +340,30 @@ class APICollector:
                 error_wait = self.stealth_manager.get_human_wait_time(long_wait=True)
                 await asyncio.sleep(error_wait)
         
-        print(f"            ✅ {district_name} 신중한 수집 완료: {len(all_properties)}개", flush=True)
-        print(f"            🎉 스텔스 수집 성공! ({len(all_properties)}개)", flush=True)
+        unique_count = len(self.collected_article_ids)
+        print(f"            ✅ {district_name} 신중한 수집 완료: {len(all_properties)}개 (유니크: {unique_count}개)", flush=True)
+        if self.duplicate_count > 0:
+            print(f"            📊 최종 중복 통계: {self.duplicate_count}개 중복 제거됨", flush=True)
+        print(f"            🎉 스텔스 수집 성공! (총 {len(all_properties)}개, 유니크 {unique_count}개)", flush=True)
         
         return all_properties
     
     def process_api_property(self, prop, district_name: str) -> Optional[Dict[str, Any]]:
-        """🏠 API 매물 데이터 처리 (기존 시스템과 동일)"""
+        """🏠 API 매물 데이터 처리 (중복 감지 포함)"""
         try:
-            # 매물 링크 생성
+            # 🎯 중복 감지 및 필터링
             atcl_no = prop.get('atclNo', '') if isinstance(prop, dict) else ''
+            if atcl_no and atcl_no in self.collected_article_ids:
+                self.duplicate_count += 1
+                print(f"                     🔄 중복 매물 감지 (건너뜀): {atcl_no} (총 중복: {self.duplicate_count}개)", flush=True)
+                return None
+            
+            # 매물 링크 생성
             naver_link = f'https://m.land.naver.com/article/info/{atcl_no}' if atcl_no else ''
+            
+            # 🎯 중복 감지 Set에 추가
+            if atcl_no:
+                self.collected_article_ids.add(atcl_no)
             
             # 면적 정보 (㎡ → 평 변환)
             spc1 = float(prop.get('spc1', 0)) if isinstance(prop, dict) and prop.get('spc1', '').replace('.', '').isdigit() else 0

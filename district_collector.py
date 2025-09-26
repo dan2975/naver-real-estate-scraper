@@ -266,7 +266,7 @@ class DistrictCollector:
                         db_df = db_df.drop(columns=[col])
                 
                 # 기존 데이터베이스 초기화
-                self.data_processor.initialize_database()
+                self.data_processor.create_tables()
                 
                 # DB에 저장
                 for _, row in db_df.iterrows():
