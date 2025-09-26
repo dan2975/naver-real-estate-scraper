@@ -5,11 +5,23 @@
 - 대량 매물 수집
 - 페이지네이션 처리
 - 스텔스 기능 통합
+- 실시간 진행률 업데이트
 """
 
 import asyncio
 from typing import List, Dict, Any, Optional
 from .stealth_manager import StealthManager
+
+# 진행률 관리자 임포트
+try:
+    from progress_manager import get_progress_manager
+except ImportError:
+    # 진행률 관리자가 없어도 동작하도록 더미 함수
+    def get_progress_manager():
+        class DummyProgressManager:
+            def update_page_progress(self, *args, **kwargs): pass
+            def add_error(self, *args, **kwargs): pass
+        return DummyProgressManager()
 
 
 class APICollector:
@@ -18,6 +30,7 @@ class APICollector:
     def __init__(self, stealth_manager: StealthManager):
         self.stealth_manager = stealth_manager
         self.api_base_url = 'https://m.land.naver.com/cluster/ajax/articleList'
+        self.progress_manager = get_progress_manager()
         
         # 기본 API 파라미터 (조건.md 준수)
         self.base_api_params = {
@@ -112,6 +125,8 @@ class APICollector:
                         if total_count:
                             self._total_count = total_count
                             print(f"                  📊 총 {total_count}개 매물 확인됨", flush=True)
+                            # 진행률 관리자에 총 개수 업데이트
+                            self.progress_manager.update_page_progress(current_page, 0, total_count)
                         else:
                             self._total_count = None
                     
@@ -134,6 +149,9 @@ class APICollector:
                         
                         print(f"                  ✅ {processed_count}개 처리 완료 (누적: {len(all_properties)}개)", flush=True)
                         consecutive_failures = 0
+                        
+                        # 진행률 업데이트
+                        self.progress_manager.update_page_progress(current_page, processed_count)
                         
                         # 총 매물 수 도달 확인
                         if hasattr(self, '_total_count') and len(all_properties) >= self._total_count:

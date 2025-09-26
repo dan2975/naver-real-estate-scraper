@@ -16,6 +16,16 @@ import subprocess
 import threading
 import time
 
+# 실시간 진행률 관리자 임포트
+try:
+    from progress_manager import get_progress_manager
+except ImportError:
+    def get_progress_manager():
+        class DummyProgressManager:
+            def get_progress(self): return {"status": "idle", "progress_percent": 0}
+            def reset_progress(self): pass
+        return DummyProgressManager()
+
 # 페이지 설정
 st.set_page_config(
     page_title="부동산 매물 수집 & 분석 시스템",
@@ -365,23 +375,98 @@ def tab_collection():
             st.rerun()
 
     with col2:
-        # 수집 상태 및 실시간 로그
-        if st.session_state.get('collection_started', False):
-            st.success("🚀 수집이 시작되었습니다!")
+        # 실시간 진행률 표시
+        progress_manager = get_progress_manager()
+        current_progress = progress_manager.get_progress()
+        
+        if st.session_state.get('collection_started', False) or current_progress.get('status') == 'running':
+            st.success("🚀 수집이 진행 중입니다!")
             
-            # 진행률 표시
-            progress = st.session_state.get('collection_progress', 0)
-            progress_bar = st.progress(progress / 100)
-            status_text = st.empty()
-            status_text.text(st.session_state.get('collection_status', ''))
+            # 🔄 자동 새로고침 (2초마다)
+            if current_progress.get('status') == 'running':
+                time.sleep(0.1)  # 짧은 대기
+                st.rerun()
+            
+            # 메인 진행률 바
+            progress_percent = current_progress.get('progress_percent', 0)
+            st.progress(progress_percent / 100, text=f"전체 진행률: {progress_percent:.1f}%")
+            
+            # 상세 진행 정보
+            col2_1, col2_2 = st.columns(2)
+            
+            with col2_1:
+                st.metric(
+                    "📍 현재 지역", 
+                    current_progress.get('current_district', '대기 중'),
+                    f"{current_progress.get('district_index', 0) + 1}/{current_progress.get('total_districts', 0)}"
+                )
+                
+                st.metric(
+                    "📄 현재 페이지",
+                    current_progress.get('current_page', 0),
+                    f"진행 중..."
+                )
+            
+            with col2_2:
+                st.metric(
+                    "🏠 수집된 매물",
+                    f"{current_progress.get('current_properties_collected', 0):,}개",
+                    f"목표: {current_progress.get('total_properties_target', 0):,}개"
+                )
+                
+                # 예상 완료 시간
+                remaining = current_progress.get('estimated_remaining_seconds')
+                if remaining:
+                    remaining_min = int(remaining / 60)
+                    remaining_sec = int(remaining % 60)
+                    st.metric("⏱️ 예상 완료", f"{remaining_min}분 {remaining_sec}초")
+                else:
+                    st.metric("⏱️ 예상 완료", "계산 중...")
+            
+            # 현재 상태
+            current_step = current_progress.get('current_step', '진행 중...')
+            st.info(f"🔄 {current_step}")
+            
+            # 완료된 지역 목록
+            completed = current_progress.get('completed_districts', [])
+            if completed:
+                with st.expander(f"✅ 완료된 지역 ({len(completed)}개)"):
+                    for district in completed:
+                        st.write(f"• {district.get('name', '')}: {district.get('properties', 0)}개")
+            
+            # 오류 목록
+            errors = current_progress.get('errors', [])
+            if errors:
+                with st.expander(f"⚠️ 오류 로그 ({len(errors)}개)", expanded=False):
+                    for error in errors[-5:]:  # 최근 5개만 표시
+                        st.error(f"{error.get('timestamp', '')}: {error.get('message', '')}")
             
             # 수집 파라미터 표시
             params = st.session_state.get('collection_params', {})
-            with st.expander("🔧 수집 파라미터"):
-                st.json(params)
-                
+            if params:
+                with st.expander("🔧 수집 파라미터"):
+                    st.json(params)
+            
+            # 수집 중지 버튼
+            if current_progress.get('status') == 'running':
+                if st.button("🛑 수집 중지", type="secondary"):
+                    progress_manager.complete_collection(
+                        current_progress.get('current_properties_collected', 0), 
+                        success=False
+                    )
+                    st.session_state.collection_started = False
+                    st.rerun()
+                    
         else:
             st.info("🎯 필터 조건을 설정하고 '수집 시작'을 눌러주세요")
+            
+            # 이전 수집 결과가 있다면 표시
+            if current_progress.get('status') == 'completed':
+                st.success(f"✅ 이전 수집 완료: {current_progress.get('current_properties_collected', 0)}개 매물")
+                
+                if st.button("🔄 진행률 초기화"):
+                    progress_manager.reset_progress()
+                    st.rerun()
             
             # 조건 유효성 검사 메시지
             if not conditions_valid:

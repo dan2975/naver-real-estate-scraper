@@ -20,6 +20,18 @@ from modules.api_collector import APICollector
 from modules.property_parser import PropertyParser
 from data_processor import PropertyDataProcessor
 
+# 진행률 관리자 임포트
+try:
+    from progress_manager import get_progress_manager
+except ImportError:
+    def get_progress_manager():
+        class DummyProgressManager:
+            def start_collection(self, *args, **kwargs): pass
+            def update_district_start(self, *args, **kwargs): pass
+            def update_district_complete(self, *args, **kwargs): pass
+            def complete_collection(self, *args, **kwargs): pass
+        return DummyProgressManager()
+
 
 class DistrictCollector:
     """🎯 메인 하이브리드 수집 시스템 오케스트레이터"""
@@ -31,6 +43,7 @@ class DistrictCollector:
         self.api_collector = APICollector(self.stealth_manager)
         self.property_parser = PropertyParser()
         self.data_processor = PropertyDataProcessor()
+        self.progress_manager = get_progress_manager()
         
         # Streamlit 매개변수 적용
         if streamlit_params:
@@ -69,6 +82,9 @@ class DistrictCollector:
         print("🎯 목표: 100% 정확한 구별 분류 + 완전한 데이터")
         print(f"🎯 수집 목표: {self.total_target:,}개 매물 ({len(self.target_districts)}개구 × {self.max_pages_per_district}페이지 × 20개)")
         
+        # 진행률 시작
+        self.progress_manager.start_collection(self.target_districts, self.max_pages_per_district * 20)
+        
         all_properties = []
         
         # Playwright 초기화
@@ -81,6 +97,9 @@ class DistrictCollector:
             try:
                 for i, district_name in enumerate(self.target_districts, 1):
                     print(f"\n📍 {i}/{len(self.target_districts)}: {district_name} 하이브리드 수집")
+                    
+                    # 진행률 업데이트: 구별 시작
+                    self.progress_manager.update_district_start(district_name, i-1)
                     
                     # 1단계: 브라우저로 구별 필터 설정
                     success = await self.setup_district_filter(page, district_name)
@@ -95,8 +114,12 @@ class DistrictCollector:
                             all_properties.extend(enhanced_properties)
                             
                             print(f"      ✅ {district_name}: {len(enhanced_properties)}개 하이브리드 수집 완료")
+                            
+                            # 진행률 업데이트: 구별 완료
+                            self.progress_manager.update_district_complete(district_name, len(enhanced_properties))
                         else:
                             print(f"      ❌ {district_name}: 하이브리드 수집 실패")
+                            self.progress_manager.update_district_complete(district_name, 0)
                     else:
                         print(f"      ❌ {district_name}: 구만 보기 버튼 찾기 실패")
                     
@@ -112,6 +135,9 @@ class DistrictCollector:
         
         # 4단계: 최종 결과 분석 및 저장
         await self.finalize_results(all_properties)
+        
+        # 진행률 완료
+        self.progress_manager.complete_collection(len(all_properties), success=True)
         
         return all_properties
     
