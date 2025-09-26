@@ -79,29 +79,52 @@ class APICollector:
         # API 파라미터 구성 (완화된 조건으로 유지)
         request_params = self.base_api_params.copy()
         
-        # 구별 좌표 정보 (기존 시스템과 동일)
-        district_coords = {
-            '강남구': {'lat': 37.517, 'lon': 127.047, 'btm': 37.4086766, 'lft': 126.9800521, 'top': 37.6251664, 'rgt': 127.1139479},
-            '강서구': {'lat': 37.551, 'lon': 126.849, 'btm': 37.4516766, 'lft': 126.7820521, 'top': 37.6501664, 'rgt': 126.9159479},
-            '영등포구': {'lat': 37.526, 'lon': 126.896, 'btm': 37.4266766, 'lft': 126.8290521, 'top': 37.6251664, 'rgt': 126.9629479},
-            '구로구': {'lat': 37.495, 'lon': 126.887, 'btm': 37.3956766, 'lft': 126.8200521, 'top': 37.5941664, 'rgt': 126.9539479},
-            '마포구': {'lat': 37.566, 'lon': 126.901, 'btm': 37.4666766, 'lft': 126.8340521, 'top': 37.6651664, 'rgt': 126.9679479}
-        }
-        
-        coords = district_coords.get(district_name, district_coords['강남구'])
-        
-        request_params.update({
-            'lat': str(coords['lat']),
-            'lon': str(coords['lon']),
-            'btm': str(coords['btm']),
-            'lft': str(coords['lft']),
-            'top': str(coords['top']),
-            'rgt': str(coords['rgt']),
-            # 조건.md 준수 (엄격한 조건)
-            'wprcMax': '2000',     # 보증금 최대 2000만원
-            'rprcMax': '130',      # 월세 최대 130만원  
-            'spcMin': '66'         # 면적 최소 66㎡ = 20평
-        })
+        # 🎯 브라우저에서 추출한 파라미터 우선 사용 (동기화 보장)
+        if 'lat' in api_params and 'lon' in api_params:
+            # 브라우저 상태 그대로 사용 (완벽한 동기화)
+            print(f"            🎯 브라우저 상태 동기화: lat={api_params['lat']}, lon={api_params['lon']}")
+            request_params.update({
+                'lat': str(api_params['lat']),
+                'lon': str(api_params['lon']),
+                'zoom': str(api_params.get('zoom', 12))
+            })
+            
+            # 브라우저 필터도 그대로 사용
+            browser_filters = ['wprcMax', 'rprcMax', 'spcMin', 'flrMin', 'flrMax']
+            for filter_key in browser_filters:
+                if filter_key in api_params:
+                    request_params[filter_key] = str(api_params[filter_key])
+                    print(f"            🎯 브라우저 필터 동기화: {filter_key}={api_params[filter_key]}")
+            
+            # 브라우저 총 매물 수 저장
+            if 'browser_total_count' in api_params:
+                self._browser_total_count = api_params['browser_total_count']
+                print(f"            🎯 브라우저 총 매물 수 설정: {self._browser_total_count}개")
+        else:
+            # 폴백: 기존 하드코딩 좌표 사용
+            print(f"            ⚠️ 브라우저 파라미터 없음, 기본 좌표 사용")
+            district_coords = {
+                '강남구': {'lat': 37.517, 'lon': 127.047, 'btm': 37.4086766, 'lft': 126.9800521, 'top': 37.6251664, 'rgt': 127.1139479},
+                '강서구': {'lat': 37.551, 'lon': 126.849, 'btm': 37.4516766, 'lft': 126.7820521, 'top': 37.6501664, 'rgt': 126.9159479},
+                '영등포구': {'lat': 37.526, 'lon': 126.896, 'btm': 37.4266766, 'lft': 126.8290521, 'top': 37.6251664, 'rgt': 126.9629479},
+                '구로구': {'lat': 37.495, 'lon': 126.887, 'btm': 37.3956766, 'lft': 126.8200521, 'top': 37.5941664, 'rgt': 126.9539479},
+                '마포구': {'lat': 37.566, 'lon': 126.901, 'btm': 37.4666766, 'lft': 126.8340521, 'top': 37.6651664, 'rgt': 126.9679479}
+            }
+            
+            coords = district_coords.get(district_name, district_coords['강남구'])
+            
+            request_params.update({
+                'lat': str(coords['lat']),
+                'lon': str(coords['lon']),
+                'btm': str(coords['btm']),
+                'lft': str(coords['lft']),
+                'top': str(coords['top']),
+                'rgt': str(coords['rgt']),
+                # 조건.md 준수 (엄격한 조건)
+                'wprcMax': '2000',     # 보증금 최대 2000만원
+                'rprcMax': '130',      # 월세 최대 130만원  
+                'spcMin': '66'         # 면적 최소 66㎡ = 20평
+            })
         
         return await self.stealth_mass_collect(request_params, district_name, max_pages)
     
@@ -154,8 +177,24 @@ class APICollector:
                         if data and 'data' in data:
                             print(f"                      data.data 키들: {list(data['data'].keys())}", flush=True)
                         
-                        total_count = data.get('data', {}).get('totCnt', 0)
-                        print(f"                      totCnt 값: {total_count}", flush=True)
+                        # 다양한 경로에서 totCnt 찾기
+                        total_count = 0
+                        if 'totCnt' in data:
+                            total_count = data['totCnt']
+                            print(f"                      totCnt 발견 (최상위): {total_count}", flush=True)
+                        elif data.get('data', {}).get('totCnt'):
+                            total_count = data['data']['totCnt']
+                            print(f"                      totCnt 발견 (data.totCnt): {total_count}", flush=True)
+                        elif 'body' in data and isinstance(data['body'], dict) and 'totCnt' in data['body']:
+                            total_count = data['body']['totCnt']
+                            print(f"                      totCnt 발견 (body.totCnt): {total_count}", flush=True)
+                        else:
+                            print(f"                      totCnt를 찾을 수 없음. 가능한 키들: {list(data.keys())}", flush=True)
+                            # 샘플 응답 저장 (디버깅용)
+                            import json
+                            with open('debug_api_response.json', 'w', encoding='utf-8') as f:
+                                json.dump(data, f, ensure_ascii=False, indent=2)
+                            print(f"                      샘플 응답 저장: debug_api_response.json", flush=True)
                         
                         if total_count:
                             self._total_count = total_count
@@ -166,8 +205,9 @@ class APICollector:
                             except:
                                 pass
                         else:
-                            self._total_count = None
-                            print(f"                  ⚠️ totCnt를 찾을 수 없음 - 무제한 수집 모드", flush=True)
+                            # totCnt를 찾을 수 없으면 more 필드 기반 수집
+                            self._total_count = None  # more 필드로 제어
+                            print(f"                  ⚠️ totCnt를 찾을 수 없음 - 'more' 필드 기반 수집 모드", flush=True)
                     
                     # 기존 시스템과 동일한 응답 처리
                     if 'body' in data and isinstance(data['body'], list):
@@ -199,12 +239,41 @@ class APICollector:
                         except:
                             pass
                         
-                        # 총 매물 수 도달 확인 (None 값 안전 처리) + 디버깅
+                        # 수집 종료 조건 확인
+                        more_value = data.get('more', 'unknown')
                         if hasattr(self, '_total_count'):
-                            print(f"                  🔍 디버그: _total_count={self._total_count}, 현재={len(all_properties)}개", flush=True)
+                            print(f"                  🔍 디버그: _total_count={self._total_count}, 현재={len(all_properties)}개, more={more_value}", flush=True)
                             if self._total_count is not None and len(all_properties) >= self._total_count:
                                 print(f"                  🎯 전체 매물 수집 완료: {len(all_properties)}/{self._total_count}개", flush=True)
                                 break
+                        
+                        # 'more' 필드로 종료 조건 확인 (API가 더 이상 데이터 없음을 알림)
+                        if 'more' in data and not data['more']:
+                            print(f"                  🎯 API 응답 완료: 더 이상 데이터 없음 (총 {len(all_properties)}개 수집)", flush=True)
+                            break
+                        
+                        # 빈 응답 감지 (중복 방지)
+                        if not articles:
+                            print(f"                  🎯 빈 응답 감지: 수집 완료 (총 {len(all_properties)}개)", flush=True)
+                            break
+                        
+                        # 🎯 순수 브라우저 감지 시스템 (하드코딩 완전 제거)
+                        if hasattr(self, '_browser_total_count') and self._browser_total_count:
+                            if len(all_properties) >= self._browser_total_count:
+                                print(f"                  🎯 브라우저 정확한 매물 수 도달: {len(all_properties)}/{self._browser_total_count}개", flush=True)
+                                print(f"                  ✅ 완벽한 브라우저-API 동기화 달성!", flush=True)
+                                break
+                        else:
+                            # 브라우저 매물 수를 감지하지 못한 경우에만 경고
+                            if len(all_properties) >= 3000:  # 매우 높은 안전 제한
+                                print(f"                  ⚠️ 브라우저 매물 수 감지 실패 - 안전 제한 도달: {len(all_properties)}개", flush=True)
+                                print(f"                  🔧 브라우저 감지 로직 개선 필요", flush=True)
+                                break
+                        
+                        # 강제 안전 제한 (비정상 상황 방지)
+                        if len(all_properties) >= 2000:
+                            print(f"                  ⚠️ 안전 제한 도달: 2000개 수집 완료 (more={more_value})", flush=True)
+                            break
                         
                         # 5페이지마다 긴 휴식
                         if current_page % 5 == 0:

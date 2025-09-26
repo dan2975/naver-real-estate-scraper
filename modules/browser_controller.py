@@ -273,6 +273,68 @@ class BrowserController:
                     api_params[api_param] = value
                     print(f"            ✅ 필터 적용: {api_param}={value}")
             
+            # 🎯 다양한 방법으로 브라우저 총 매물 수 추출
+            total_count = None
+            try:
+                # 방법 1: "총 836+ 개의 매물이 있습니다" 텍스트 찾기
+                selectors_to_try = [
+                    'text=/총.*개의 매물이 있습니다/',
+                    'text=/총.*개의/',
+                    'text=/.*개의 매물/',
+                    '[class*="count"]',
+                    '[class*="total"]'
+                ]
+                
+                for selector in selectors_to_try:
+                    try:
+                        elements = await page.query_selector_all(selector)
+                        for element in elements:
+                            text = await element.text_content()
+                            if text and ('매물' in text or '개' in text):
+                                # 다양한 패턴으로 숫자 추출 시도
+                                patterns = [
+                                    r'총\s*(\d+)',
+                                    r'(\d+)\s*\+?\s*개',
+                                    r'(\d+)\s*개의\s*매물',
+                                    r'(\d{2,})'  # 두 자리 이상 숫자
+                                ]
+                                
+                                for pattern in patterns:
+                                    match = re.search(pattern, text)
+                                    if match:
+                                        extracted_count = int(match.group(1))
+                                        # 합리적인 범위 체크 (50~5000개)
+                                        if 50 <= extracted_count <= 5000:
+                                            total_count = extracted_count
+                                            print(f"            🎯 브라우저 총 매물 수 감지: {total_count}개 (패턴: {pattern})")
+                                            print(f"            📱 감지된 텍스트: '{text.strip()}'")
+                                            break
+                                
+                                if total_count:
+                                    break
+                        
+                        if total_count:
+                            break
+                            
+                    except Exception as selector_error:
+                        continue
+                
+                if total_count:
+                    api_params['browser_total_count'] = total_count
+                else:
+                    print(f"            ❌ 모든 방법으로 매물 수 감지 실패")
+                    # 페이지 텍스트 샘플 출력 (디버깅용)
+                    try:
+                        page_text = await page.text_content('body')
+                        if page_text:
+                            sample_text = page_text[:500]
+                            print(f"            🔍 페이지 텍스트 샘플: {sample_text}")
+                    except:
+                        pass
+                        
+            except Exception as e:
+                print(f"            ❌ 매물 수 추출 오류: {e}")
+            
             return api_params
             
         except Exception as e:
