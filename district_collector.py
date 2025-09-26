@@ -59,7 +59,7 @@ class DistrictCollector:
             }
         
         # 수집 설정
-        self.max_pages_per_district = 20  # 구별 최대 페이지 (400개)
+        self.max_pages_per_district = 200  # 구별 최대 페이지 (4,000개)
         self.total_target = len(self.target_districts) * self.max_pages_per_district * 20  # 목표
     
     async def run_hybrid_collection(self) -> List[Dict[str, Any]]:
@@ -67,7 +67,7 @@ class DistrictCollector:
         print("🗺️ === 모듈화된 하이브리드 수집 시스템 ===")
         print("💡 방식: 브라우저 '구만보기' → API 대량수집")
         print("🎯 목표: 100% 정확한 구별 분류 + 완전한 데이터")
-        print(f"🎯 수집 목표: {self.total_target}개 매물 ({len(self.target_districts)}개구 × {self.max_pages_per_district}페이지 × 20개)")
+        print(f"🎯 수집 목표: {self.total_target:,}개 매물 ({len(self.target_districts)}개구 × {self.max_pages_per_district}페이지 × 20개)")
         
         all_properties = []
         

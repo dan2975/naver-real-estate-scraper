@@ -328,8 +328,8 @@ def tab_collection():
         st.write(f"🏠 **월세**: {rent_min:,}~{rent_max:,}만원") 
         st.write(f"📐 **면적**: {area_min}~{area_max}평")
         
-        # 예상 수집량
-        estimated = len(districts) * 400  # 구당 400개 예상
+        # 예상 수집량 (구별 최대 200페이지 × 20개 = 4,000개)
+        estimated = len(districts) * 4000  # 구당 최대 4,000개
         st.metric("예상 수집량", f"{estimated:,}개")
         
         # 필터 조건 검증
