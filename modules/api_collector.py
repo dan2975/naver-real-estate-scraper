@@ -149,7 +149,14 @@ class APICollector:
                     
                     # 총 매물 수 확인 (첫 페이지에서)
                     if current_page == 1:
+                        print(f"                  🔍 API 응답 구조 디버그:", flush=True)
+                        print(f"                      data 키들: {list(data.keys()) if data else 'data is None'}", flush=True)
+                        if data and 'data' in data:
+                            print(f"                      data.data 키들: {list(data['data'].keys())}", flush=True)
+                        
                         total_count = data.get('data', {}).get('totCnt', 0)
+                        print(f"                      totCnt 값: {total_count}", flush=True)
+                        
                         if total_count:
                             self._total_count = total_count
                             print(f"                  📊 총 {total_count}개 매물 확인됨", flush=True)
@@ -160,6 +167,7 @@ class APICollector:
                                 pass
                         else:
                             self._total_count = None
+                            print(f"                  ⚠️ totCnt를 찾을 수 없음 - 무제한 수집 모드", flush=True)
                     
                     # 기존 시스템과 동일한 응답 처리
                     if 'body' in data and isinstance(data['body'], list):
@@ -191,10 +199,12 @@ class APICollector:
                         except:
                             pass
                         
-                        # 총 매물 수 도달 확인 (None 값 안전 처리)
-                        if hasattr(self, '_total_count') and self._total_count is not None and len(all_properties) >= self._total_count:
-                            print(f"                  🎯 전체 매물 수집 완료: {len(all_properties)}/{self._total_count}개", flush=True)
-                            break
+                        # 총 매물 수 도달 확인 (None 값 안전 처리) + 디버깅
+                        if hasattr(self, '_total_count'):
+                            print(f"                  🔍 디버그: _total_count={self._total_count}, 현재={len(all_properties)}개", flush=True)
+                            if self._total_count is not None and len(all_properties) >= self._total_count:
+                                print(f"                  🎯 전체 매물 수집 완료: {len(all_properties)}/{self._total_count}개", flush=True)
+                                break
                         
                         # 5페이지마다 긴 휴식
                         if current_page % 5 == 0:
