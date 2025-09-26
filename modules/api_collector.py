@@ -191,8 +191,8 @@ class APICollector:
                         except:
                             pass
                         
-                        # 총 매물 수 도달 확인
-                        if hasattr(self, '_total_count') and len(all_properties) >= self._total_count:
+                        # 총 매물 수 도달 확인 (None 값 안전 처리)
+                        if hasattr(self, '_total_count') and self._total_count is not None and len(all_properties) >= self._total_count:
                             print(f"                  🎯 전체 매물 수집 완료: {len(all_properties)}/{self._total_count}개", flush=True)
                             break
                         
