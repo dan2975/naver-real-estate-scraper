@@ -230,10 +230,20 @@ class DistrictCollector:
             # DataFrame 생성
             df = pd.DataFrame(all_properties)
             
-            # 파일명 생성
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            csv_filename = f"modular_hybrid_collection_{timestamp}.csv"
-            json_filename = f"modular_hybrid_collection_{timestamp}.json"
+            # 고정 파일명 사용 (로그 파일 중복 방지)
+            csv_filename = "latest_collection.csv"
+            json_filename = "latest_collection.json"
+            
+            # 기존 파일이 있으면 백업
+            if os.path.exists(csv_filename):
+                backup_csv = f"backup_{csv_filename}"
+                os.rename(csv_filename, backup_csv)
+                print(f"📦 이전 CSV 백업: {backup_csv}")
+            
+            if os.path.exists(json_filename):
+                backup_json = f"backup_{json_filename}"
+                os.rename(json_filename, backup_json)
+                print(f"📦 이전 JSON 백업: {backup_json}")
             
             # CSV 저장
             df.to_csv(csv_filename, index=False, encoding='utf-8-sig')
