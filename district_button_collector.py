@@ -1298,14 +1298,20 @@ class DistrictButtonCollector:
             'max_management_fee': 30   # 관리비 30 이하
         }
         
-        조건부합 = df[
-            (df['deposit'] <= conditions['max_deposit']) &
-            (df['monthly_rent'] <= conditions['max_monthly_rent']) &
-            (df['total_monthly_cost'] <= conditions['max_total_monthly']) &
-            (df['floor'] >= conditions['min_floor']) &
-            (df['floor'] <= conditions['max_floor']) &
-            (df['area_pyeong'] >= conditions['min_area_pyeong']) &
-            (df['management_fee'] <= conditions['max_management_fee'])
+        # None 값 안전 처리
+        df_safe = df.copy()
+        df_safe['floor'] = df_safe['floor'].fillna(0)  # None을 0으로 치환
+        df_safe['management_fee'] = df_safe['management_fee'].fillna(0)
+        df_safe['total_monthly_cost'] = df_safe['total_monthly_cost'].fillna(0)
+        
+        조건부합 = df_safe[
+            (df_safe['deposit'] <= conditions['max_deposit']) &
+            (df_safe['monthly_rent'] <= conditions['max_monthly_rent']) &
+            (df_safe['total_monthly_cost'] <= conditions['max_total_monthly']) &
+            (df_safe['floor'] >= conditions['min_floor']) &
+            (df_safe['floor'] <= conditions['max_floor']) &
+            (df_safe['area_pyeong'] >= conditions['min_area_pyeong']) &
+            (df_safe['management_fee'] <= conditions['max_management_fee'])
         ]
         
         return len(조건부합)

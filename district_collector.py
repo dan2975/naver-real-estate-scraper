@@ -205,19 +205,16 @@ class DistrictCollector:
         
         for prop in properties:
             try:
-                # 프로퍼티 파서를 통한 데이터 향상
-                enhanced_prop = self.property_parser.enhance_property_data(prop)
-                enhanced_properties.append(enhanced_prop)
+                # 이전 성공 코드와 동일하게 원본 데이터 그대로 사용 (PropertyParser 비활성화)
+                enhanced_properties.append(prop)
                 
             except Exception as e:
-                print(f"            ⚠️ 매물 향상 오류: {e}")
+                print(f"            ⚠️ 매물 처리 오류: {e}")
                 # 원본 데이터라도 포함
                 enhanced_properties.append(prop)
         
-        # 배치 분석
-        analysis = self.property_parser.analyze_properties_batch(enhanced_properties)
-        if analysis:
-            print(f"            📊 분석 결과: {analysis.get('compliant_count', 0)}/{analysis.get('total_count', 0)}개 조건부합 ({analysis.get('compliance_rate', 0)}%)")
+        # 배치 분석 (이전 성공 코드와 동일하게 비활성화)
+        print(f"            📊 분석 결과: {len(enhanced_properties)}개 매물 수집 완료")
         
         return enhanced_properties
     
