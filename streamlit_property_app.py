@@ -214,18 +214,56 @@ def tab_collection():
         st.info("📝 상가+사무실 월세 전용")
         
         # 지역 선택 (서울 전체 25개 구)
+        all_districts = [
+            '강남구', '강동구', '강북구', '강서구', '관악구',
+            '광진구', '구로구', '금천구', '노원구', '도봉구',
+            '동대문구', '동작구', '마포구', '서대문구', '서초구',
+            '성동구', '성북구', '송파구', '양천구', '영등포구',
+            '용산구', '은평구', '종로구', '중구', '중랑구'
+        ]
+        
+        # 선택 버튼들
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗺️ 전체 구 선택", key="select_all_districts"):
+                st.session_state.selected_districts = all_districts
+        with col2:
+            if st.button("❌ 전체 해제", key="clear_all_districts"):
+                st.session_state.selected_districts = []
+        
+        # 프리셋 선택
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🏢 강남권 (5개구)", key="select_gangnam"):
+                st.session_state.selected_districts = ['강남구', '서초구', '송파구', '강동구', '용산구']
+        with col2:
+            if st.button("💼 비즈니스구 (6개구)", key="select_business"):
+                st.session_state.selected_districts = ['강남구', '서초구', '중구', '종로구', '영등포구', '마포구']
+        
+        # 세션 상태에서 선택된 구 가져오기
+        if 'selected_districts' not in st.session_state:
+            st.session_state.selected_districts = ['강남구']
+        
         districts = st.multiselect(
             "📍 수집 지역", 
-            [
-                '강남구', '강동구', '강북구', '강서구', '관악구',
-                '광진구', '구로구', '금천구', '노원구', '도봉구',
-                '동대문구', '동작구', '마포구', '서대문구', '서초구',
-                '성동구', '성북구', '송파구', '양천구', '영등포구',
-                '용산구', '은평구', '종로구', '중구', '중랑구'
-            ],
-            default=['강남구'],
-            help="수집할 구를 선택하세요 (서울 전체 25개 구)"
+            all_districts,
+            default=st.session_state.selected_districts,
+            help="수집할 구를 선택하세요 (서울 전체 25개 구)",
+            key="districts_multiselect"
         )
+        
+        # 선택된 구 상태 업데이트
+        st.session_state.selected_districts = districts
+        
+        # 선택된 구 정보 표시
+        if districts:
+            st.info(f"✅ 선택된 지역: {len(districts)}개 구")
+            if len(districts) <= 5:
+                st.write("🏢 " + ", ".join(districts))
+            else:
+                st.write(f"🏢 {districts[0]}, {districts[1]}, {districts[2]} 외 {len(districts)-3}개 구")
+        else:
+            st.warning("📍 최소 1개 지역을 선택해주세요")
         
         # 보증금 범위
         st.subheader("💰 보증금 조건")
