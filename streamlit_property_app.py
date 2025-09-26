@@ -362,7 +362,7 @@ def tab_collection():
                 args=(st.session_state.collection_params,)
             )
             thread.start()
-            st.experimental_rerun()
+            st.rerun()
 
     with col2:
         # 수집 상태 및 실시간 로그
