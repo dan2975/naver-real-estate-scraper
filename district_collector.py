@@ -246,36 +246,22 @@ class DistrictCollector:
                 os.rename(json_filename, backup_json)
                 print(f"📦 이전 JSON 백업: {backup_json}")
             
-            # CSV 저장
-            df.to_csv(csv_filename, index=False, encoding='utf-8-sig')
-            print(f"✅ CSV 저장: {csv_filename}")
-            
-            # JSON 저장
-            df.to_json(json_filename, orient='records', force_ascii=False, indent=2)
-            print(f"✅ JSON 저장: {json_filename}")
-            
-            # 데이터베이스 저장 시도
+            # 🎯 DB 중심 시스템: UPSERT 방식으로 저장 (중복 시 업데이트)
             try:
-                # DB 저장을 위한 컬럼 정리
-                db_df = df.copy()
+                stats = self.data_processor.import_with_upsert(df)
+                print(f"✅ DB UPSERT: 신규 {stats['new_count']}개, 업데이트 {stats['updated_count']}개, 오류 {stats['error_count']}개")
                 
-                # 복잡한 객체 컬럼 제거
-                columns_to_drop = ['conditions_compliance', 'raw_data']
-                for col in columns_to_drop:
-                    if col in db_df.columns:
-                        db_df = db_df.drop(columns=[col])
-                
-                # 기존 데이터베이스 초기화
-                self.data_processor.create_tables()
-                
-                # DB에 저장
-                for _, row in db_df.iterrows():
-                    self.data_processor.save_property(row.to_dict())
-                
-                print(f"✅ DB 저장 완료")
+                # 백업용 CSV만 생성 (옵션)
+                backup_csv = f"backup_collection_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                df.to_csv(backup_csv, index=False, encoding='utf-8-sig')
+                print(f"📦 백업 CSV: {backup_csv}")
                 
             except Exception as db_error:
                 print(f"⚠️ DB 저장 오류: {db_error}")
+                # DB 실패 시에만 CSV로 폴백
+                fallback_csv = f"fallback_collection_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                df.to_csv(fallback_csv, index=False, encoding='utf-8-sig')
+                print(f"📄 폴백 CSV 저장: {fallback_csv}")
             
             # 통계 출력
             await self.print_collection_statistics(df)

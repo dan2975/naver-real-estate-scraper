@@ -115,8 +115,52 @@ def load_property_data():
         st.error(f"데이터 로드 오류: {e}")
         return pd.DataFrame()
 
-def apply_range_filters(df, districts=None, deposit_range=None, rent_range=None, area_range=None):
-    """범위 필터 적용 함수"""
+def load_database_data():
+    """데이터베이스에서 매물 데이터 로드"""
+    try:
+        from data_processor import PropertyDataProcessor
+        processor = PropertyDataProcessor()
+        
+        # DB 매물 개수 확인
+        db_count = processor.get_properties_count()
+        
+        if db_count == 0:
+            st.warning("⚠️ 데이터베이스가 비어있습니다.")
+            
+            # CSV → DB 자동 가져오기 제안
+            if st.button("📥 최신 CSV → DB 자동 가져오기"):
+                csv_files = [f for f in os.listdir('.') if f.endswith('.csv') and 'collection' in f]
+                if csv_files:
+                    latest_csv = max(csv_files, key=lambda x: os.path.getmtime(x))
+                    saved_count = processor.import_csv_to_db(latest_csv, overwrite=True)
+                    st.success(f"✅ {saved_count}개 매물을 DB에 저장했습니다!")
+                    st.rerun()
+                else:
+                    st.error("❌ CSV 파일을 찾을 수 없습니다.")
+            
+            return pd.DataFrame()
+        
+        # DB에서 데이터 로드
+        df = processor.get_all_properties_from_db()
+        st.info(f"📊 데이터베이스: {len(df)}개 매물 로드됨")
+        
+        # 데이터 전처리 (CSV와 동일하게)
+        df = df.fillna('')
+        
+        # 숫자 컬럼 변환
+        numeric_columns = ['area_pyeong', 'area_sqm', 'floor', 'deposit', 'monthly_rent', 'management_fee', 'total_monthly_cost', 'score']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        
+        return df
+        
+    except Exception as e:
+        st.error(f"❌ DB 로드 오류: {e}")
+        return pd.DataFrame()
+
+def apply_enhanced_filters(df, districts=None, deposit_range=None, rent_range=None, floor_range=None, area_range=None, include_whole_building=True):
+    """🎯 개선된 필터 적용 함수 (층수 포함, 0층 옵션)"""
     if df.empty:
         return df
         
@@ -139,6 +183,22 @@ def apply_range_filters(df, districts=None, deposit_range=None, rent_range=None,
             (filtered['monthly_rent'] >= rent_range[0]) &
             (filtered['monthly_rent'] <= rent_range[1])
         ]
+    
+    # 🏢 층수 범위 (0층 = 건물 전체 처리)
+    if floor_range and 'floor' in filtered.columns:
+        if include_whole_building:
+            # 0층(건물 전체) 포함
+            filtered = filtered[
+                (filtered['floor'] >= floor_range[0]) &
+                (filtered['floor'] <= floor_range[1])
+            ]
+        else:
+            # 0층(건물 전체) 제외
+            filtered = filtered[
+                (filtered['floor'] >= floor_range[0]) &
+                (filtered['floor'] <= floor_range[1]) &
+                (filtered['floor'] != 0)
+            ]
     
     # 면적 범위
     if area_range and 'area_pyeong' in filtered.columns:
@@ -542,125 +602,235 @@ def tab_results():
     """Tab 3: 📊 결과"""
     st.header("📊 수집 결과")
     
-    # 데이터 로드
-    df = load_property_data()
+    # 🎯 DB 중심 시스템: 데이터베이스만 사용
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        st.info("📊 데이터베이스 중심 시스템 - 모든 데이터는 DB에서 로드됩니다")
+    with col2:
+        # DB 새로고침
+        if st.button("🔄 DB 새로고침"):
+            st.cache_data.clear()
+            st.rerun()
+    with col3:
+        # DB → CSV 내보내기 (백업용)
+        if st.button("📥 CSV 백업"):
+            try:
+                from data_processor import PropertyDataProcessor
+                processor = PropertyDataProcessor()
+                db_df = processor.get_all_properties_from_db()
+                if not db_df.empty:
+                    csv_data = db_df.to_csv(index=False, encoding='utf-8-sig')
+                    st.download_button(
+                        "💾 백업 CSV 다운로드",
+                        csv_data,
+                        f"backup_properties_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        "text/csv"
+                    )
+                else:
+                    st.warning("⚠️ DB가 비어있습니다")
+            except Exception as e:
+                st.error(f"❌ 백업 실패: {e}")
+    
+    # 🔍 DB 상태 디버그 정보
+    with st.expander("🔍 디버그 정보"):
+        try:
+            from data_processor import PropertyDataProcessor
+            processor = PropertyDataProcessor()
+            db_count = processor.get_properties_count()
+            st.write(f"📊 실제 DB 매물 수: {db_count}개")
+            
+            if db_count > 0:
+                # 샘플 데이터 표시
+                import sqlite3
+                conn = sqlite3.connect('data/properties.db')
+                sample_df = pd.read_sql_query('SELECT district, building_name, deposit, monthly_rent FROM properties LIMIT 3', conn)
+                conn.close()
+                st.write("📋 샘플 데이터:")
+                st.dataframe(sample_df)
+        except Exception as e:
+            st.error(f"❌ DB 디버그 오류: {e}")
+    
+    # 데이터 로드 (DB만 사용)
+    df = load_database_data()
     
     if df.empty:
         st.info("📭 아직 수집된 매물이 없습니다. '수집' 탭에서 데이터를 수집해주세요.")
         return
     
-    # 상단 필터 바 (범위 설정)
+    # 🔍 깔끔한 필터 섹션
     st.subheader("🔍 결과 필터링")
     
-    col1, col2 = st.columns(2)
+    # 지역 선택 (최상단)
+    filter_districts = st.multiselect(
+        "📍 지역 선택", 
+        options=sorted(df['district'].unique()),
+        default=sorted(df['district'].unique()),
+        help="표시할 지역을 선택하세요"
+    )
+    
+    # 3개 컬럼으로 필터 정리
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        # 지역 필터
-        filter_districts = st.multiselect(
-            "📍 지역 선택", 
-            options=sorted(df['district'].unique()),
-            default=sorted(df['district'].unique()),
-            help="표시할 지역을 선택하세요"
+        # 💰 보증금 범위
+        st.markdown("**💰 보증금 범위**")
+        filter_deposit_min = st.number_input(
+            "최소", min_value=0, max_value=10000, value=0, step=100,
+            key="filter_deposit_min"
         )
-        
-        # 보증금 범위 필터
-        st.subheader("💰 보증금 범위")
-        col1_1, col1_2 = st.columns(2)
-        with col1_1:
-            filter_deposit_min = st.number_input(
-                "최소", min_value=0, max_value=10000, value=0, step=100,
-                key="filter_deposit_min"
-            )
-        with col1_2:
-            filter_deposit_max = st.number_input(
-                "최대", min_value=0, max_value=10000, value=10000, step=100,
-                key="filter_deposit_max"
-            )
+        filter_deposit_max = st.number_input(
+            "최대", min_value=0, max_value=10000, value=10000, step=100,
+            key="filter_deposit_max"
+        )
     
     with col2:
-        # 정렬 옵션
-        sort_by = st.selectbox(
-            "📊 정렬 기준", 
-            [
-                "보증금 낮은순", "보증금 높은순",
-                "월세 낮은순", "월세 높은순", 
-                "면적 큰순", "면적 작은순",
-                "등록순"
-            ]
+        # 🏠 월세 범위
+        st.markdown("**🏠 월세 범위**")
+        filter_rent_min = st.number_input(
+            "최소", min_value=0, max_value=1000, value=0, step=10,
+            key="filter_rent_min"
+        )
+        filter_rent_max = st.number_input(
+            "최대", min_value=0, max_value=1000, value=1000, step=10,
+            key="filter_rent_max"
+        )
+    
+    with col3:
+        # 🏢 층수 범위 (새로 추가)
+        st.markdown("**🏢 층수 범위**")
+        filter_floor_min = st.number_input(
+            "최소 층", min_value=-5, max_value=50, value=-1, step=1,
+            key="filter_floor_min",
+            help="지하층: 음수 (예: 지하1층 = -1) | 0층: 건물 전체 임대"
+        )
+        filter_floor_max = st.number_input(
+            "최대 층", min_value=-5, max_value=50, value=10, step=1,
+            key="filter_floor_max"
         )
         
-        # 월세 범위 필터
-        st.subheader("🏠 월세 범위")
-        col2_1, col2_2 = st.columns(2)
-        with col2_1:
-            filter_rent_min = st.number_input(
-                "최소", min_value=0, max_value=1000, value=0, step=10,
-                key="filter_rent_min"
-            )
-        with col2_2:
-            filter_rent_max = st.number_input(
-                "최대", min_value=0, max_value=1000, value=1000, step=10,
-                key="filter_rent_max"
-            )
+        # 0층 설명 추가
+        include_whole_building = st.checkbox("0층 포함 (건물 전체 임대)", value=True, key="include_whole_building")
+        if include_whole_building:
+            st.caption("💡 0층은 건물 전체 임대 매물입니다")
+        else:
+            st.caption("ℹ️ 0층(건물 전체) 제외됨")
     
-    # 면적 범위 필터
-    st.subheader("📐 면적 범위")
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col1:
+    # 면적 범위 (별도 행)
+    st.markdown("**📐 면적 범위**")
+    col4, col5 = st.columns(2)
+    with col4:
         filter_area_min = st.number_input(
-            "최소 면적 (평)", min_value=0, max_value=200, value=0, step=1,
+            "최소 평", min_value=0.0, max_value=200.0, value=20.0, step=1.0,
             key="filter_area_min"
         )
-    with col2:
+    with col5:
         filter_area_max = st.number_input(
-            "최대 면적 (평)", min_value=0, max_value=200, value=200, step=1,
+            "최대 평", min_value=0.0, max_value=200.0, value=100.0, step=1.0,
             key="filter_area_max"
         )
     
-    # 범위 필터 적용
-    filtered_df = apply_range_filters(
+    # 🎯 개선된 필터 적용 (층수 포함)
+    filtered_df = apply_enhanced_filters(
         df, 
         districts=filter_districts,
         deposit_range=(filter_deposit_min, filter_deposit_max),
         rent_range=(filter_rent_min, filter_rent_max),
-        area_range=(filter_area_min, filter_area_max)
+        floor_range=(filter_floor_min, filter_floor_max),
+        area_range=(filter_area_min, filter_area_max),
+        include_whole_building=include_whole_building
     )
     
-    # 정렬 적용
-    sorted_df = apply_sorting(filtered_df, sort_by)
+    # 필터 결과 표시
+    st.success(f"🎯 필터 적용 후: **{len(filtered_df):,}개** 매물 (전체 {len(df):,}개 중)")
     
-    with col3:
-        st.metric("필터 적용 후", f"{len(sorted_df):,}개")
-    
-    # 데이터 테이블
-    if len(sorted_df) > 0:
-        st.success(f"📋 {len(sorted_df):,}개 매물 표시 (전체 {len(df):,}개 중)")
+    # 📋 필터링된 데이터 테이블 표시
+    if len(filtered_df) > 0:
+        # 🎯 동적 컬럼 표시 (필터 결과에 맞게)
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.subheader(f"📋 필터 결과 ({len(filtered_df):,}개 매물)")
+        with col2:
+            # 표시 모드 선택
+            display_mode = st.selectbox(
+                "표시 모드",
+                ["전체 컬럼", "핵심 컬럼만"],
+                key="display_mode"
+            )
         
-        # 표시할 컬럼 선택
-        display_columns = ['district', 'deposit', 'monthly_rent', 'area_pyeong']
-        if 'naver_link' in sorted_df.columns:
-            display_columns.append('naver_link')
+        st.info("💡 좌우 스크롤하여 모든 데이터를 확인할 수 있습니다")
         
-        # 컬럼 설정
+        # DB 컬럼 순서대로 정렬 (25개 전체)
+        db_column_order = [
+            'id', 'region', 'district', 'building_name', 'full_address',
+            'area_sqm', 'area_pyeong', 'floor', 'total_floors', 'floor_display', 
+            'deposit', 'monthly_rent', 'management_fee', 'total_monthly_cost', 'ceiling_height',
+            'parking_available', 'near_station', 'build_year', 'naver_link',
+            'data_source', 'score', 'labels', 'collected_at', 'raw_text', 'created_at'
+        ]
+        
+        # 표시 모드에 따른 컬럼 선택
+        if display_mode == "핵심 컬럼만":
+            # 핵심 컬럼만 선택 (사용자 친화적)
+            core_columns = [
+                'id', 'district', 'deposit', 'monthly_rent', 'area_pyeong', 
+                'floor_display', 'building_name', 'data_source', 'naver_link', 'collected_at'
+            ]
+            selected_order = core_columns
+            st.caption("📌 핵심 10개 컬럼만 표시")
+        else:
+            # 전체 25개 컬럼
+            selected_order = db_column_order
+            st.caption("📌 전체 25개 컬럼 표시")
+        
+        # 실제 존재하는 컬럼만 선택
+        available_columns = [col for col in selected_order if col in filtered_df.columns]
+        missing_columns = [col for col in selected_order if col not in filtered_df.columns]
+        
+        if missing_columns:
+            st.caption(f"⚠️ 누락된 컬럼: {', '.join(missing_columns)}")
+        
+        # 한글 컬럼명 매핑 (25개 전체)
         column_config = {
-            'district': '지역',
-            'deposit': '보증금(만원)',
-            'monthly_rent': '월세(만원)', 
-            'area_pyeong': '면적(평)',
+            'id': st.column_config.NumberColumn('ID', width="small"),
+            'region': '지역',
+            'district': '구/군',
+            'building_name': '건물명',
+            'full_address': '주소',
+            'area_sqm': st.column_config.NumberColumn('면적(㎡)', format="%.1f"),
+            'area_pyeong': st.column_config.NumberColumn('면적(평)', format="%.1f"),
+            'floor': st.column_config.NumberColumn('층수'),
+            'total_floors': st.column_config.NumberColumn('총층수'),
+            'floor_display': '층수정보',
+            'deposit': st.column_config.NumberColumn('보증금(만원)', format="%d"),
+            'monthly_rent': st.column_config.NumberColumn('월세(만원)', format="%d"),
+            'management_fee': st.column_config.NumberColumn('관리비(만원)', format="%d"),
+            'total_monthly_cost': st.column_config.NumberColumn('총월비용(만원)', format="%.1f"),
+            'ceiling_height': st.column_config.NumberColumn('천장높이(m)', format="%.1f"),
+            'parking_available': st.column_config.CheckboxColumn('주차가능'),
+            'near_station': st.column_config.CheckboxColumn('역세권'),
+            'build_year': st.column_config.NumberColumn('건축년도'),
+            'naver_link': st.column_config.LinkColumn('네이버링크'),
+            'data_source': '매물유형',
+            'score': st.column_config.NumberColumn('점수'),
+            'labels': '라벨',
+            'collected_at': st.column_config.DatetimeColumn('수집일시'),
+            'raw_text': st.column_config.TextColumn('원시데이터', width="large"),
+            'created_at': st.column_config.DatetimeColumn('생성일시')
         }
         
-        if 'naver_link' in display_columns:
-            column_config['naver_link'] = st.column_config.LinkColumn('네이버링크')
+        # 컬럼 개수 표시
+        total_possible = len(db_column_order) if display_mode == "전체 컬럼" else len(core_columns)
+        st.caption(f"📊 표시 컬럼: {len(available_columns)}개 / 선택된 {total_possible}개 / DB 전체 {len(db_column_order)}개")
         
-        # 데이터프레임 표시
+        # 전체 데이터프레임 표시 (가로 스크롤)
         st.dataframe(
-            sorted_df[display_columns], 
-            width="stretch",
+            filtered_df[available_columns], 
+            height=400,  # 세로 스크롤 지원
             column_config=column_config
         )
         
         # 다운로드 버튼
-        csv = sorted_df.to_csv(index=False, encoding='utf-8-sig')
+        csv = filtered_df.to_csv(index=False, encoding='utf-8-sig')
         st.download_button(
             "📥 CSV 다운로드", 
             data=csv, 
@@ -668,7 +838,8 @@ def tab_results():
             mime="text/csv"
         )
     else:
-        st.warning("🔍 필터 조건에 맞는 매물이 없습니다. 조건을 완화해보세요.")
+        st.warning("🔍 필터 조건에 맞는 매물이 없습니다.")
+        st.info("💡 필터 조건을 완화하거나 다른 지역을 선택해보세요.")
 
 def tab_statistics():
     """Tab 4: 📈 통계"""
