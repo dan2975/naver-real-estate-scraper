@@ -27,13 +27,33 @@ except ImportError:
 class APICollector:
     """🚀 네이버 부동산 API를 통한 매물 수집 클래스"""
     
-    def __init__(self, stealth_manager: StealthManager):
+    def __init__(self, stealth_manager: StealthManager, streamlit_filters=None):
         self.stealth_manager = stealth_manager
         self.api_base_url = 'https://m.land.naver.com/cluster/ajax/articleList'
         self.progress_manager = get_progress_manager()
+        self.streamlit_filters = streamlit_filters or {}
         
-        # 기본 API 파라미터 (조건.md 준수)
-        self.base_api_params = {
+        # 동적 API 파라미터 (Streamlit 필터 반영)
+        self.base_api_params = self._build_api_params_from_filters()
+    
+    def _build_api_params_from_filters(self) -> Dict[str, Any]:
+        """🎯 Streamlit 필터를 API 파라미터로 변환"""
+        # 기본값 (조건.md 기준)
+        default_filters = {
+            'deposit_max': 2000,      # 보증금 최대 2000만원
+            'monthly_rent_max': 130,  # 월세 최대 130만원  
+            'area_min': 20           # 면적 최소 20평 (66㎡)
+        }
+        
+        # Streamlit 필터가 있으면 우선 적용
+        deposit_max = self.streamlit_filters.get('deposit_max', default_filters['deposit_max'])
+        monthly_rent_max = self.streamlit_filters.get('monthly_rent_max', default_filters['monthly_rent_max']) 
+        area_min_pyeong = self.streamlit_filters.get('area_min', default_filters['area_min'])
+        area_min_sqm = int(area_min_pyeong * 3.3)  # 평을 ㎡로 변환
+        
+        print(f"            🎯 필터 적용됨 - 보증금≤{deposit_max}만원, 월세≤{monthly_rent_max}만원, 면적≥{area_min_pyeong}평")
+        
+        return {
             'rletTpCd': 'SG:SMS',  # 상가+사무실
             'tradTpCd': 'B2',      # 월세
             'z': '12',             # 줌 레벨
@@ -43,9 +63,9 @@ class APICollector:
             'lft': '126.8780',     # 서쪽 경계  
             'top': '37.6665',      # 북쪽 경계
             'rgt': '127.0780',     # 동쪽 경계
-            'wprcMax': '2000',     # 보증금 최대 (조건.md: 2000만원)
-            'rprcMax': '130',      # 월세 최대 (조건.md: 130만원)
-            'spcMin': '66',        # 면적 최소 (조건.md: 66㎡ = 20평)
+            'wprcMax': str(deposit_max),      # 동적 보증금 최대
+            'rprcMax': str(monthly_rent_max), # 동적 월세 최대
+            'spcMin': str(area_min_sqm),      # 동적 면적 최소
             'page': '1',
             'showR0': '',
             'totCnt': '7689',
@@ -238,6 +258,23 @@ class APICollector:
             # 매물 타입
             rlet_tp_nm = prop.get('rletTpNm', '상가') if isinstance(prop, dict) else '상가'
             
+            # 층수 정보 추출 (NoneType 오류 방지)
+            floor_number = None
+            if isinstance(flr_info, str):
+                try:
+                    # "3/10층" 형태에서 현재 층수 추출
+                    if '/' in flr_info:
+                        current_floor_str = flr_info.split('/')[0].strip()
+                        if current_floor_str.startswith('B'):
+                            # 지하층 처리 (B1 = -1)
+                            floor_number = -int(current_floor_str[1:])
+                        else:
+                            floor_number = int(current_floor_str)
+                    elif flr_info.replace('층', '').isdigit():
+                        floor_number = int(flr_info.replace('층', ''))
+                except (ValueError, IndexError):
+                    floor_number = None
+            
             return {
                 'district': district_name,
                 'property_type': rlet_tp_nm,
@@ -247,6 +284,7 @@ class APICollector:
                 'area_pyeong': area_pyeong,
                 'floor': floor,
                 'floor_info': flr_info,
+                'floor_number': floor_number,  # 추가!
                 'building_name': bild_nm,
                 'property_name': atcl_nm,
                 'full_address': full_address,

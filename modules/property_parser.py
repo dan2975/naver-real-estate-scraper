@@ -14,9 +14,9 @@ from typing import Dict, Any, Optional, List, Tuple
 class PropertyParser:
     """🏠 매물 데이터 파싱을 담당하는 클래스"""
     
-    def __init__(self):
-        # 조건.md 기준 필터링 조건
-        self.conditions = {
+    def __init__(self, streamlit_filters=None):
+        # 기본 조건 (조건.md 기준)
+        default_conditions = {
             'max_deposit': 2000,      # 보증금 2000만원 이하
             'max_monthly_rent': 130,  # 월세 130만원 이하
             'max_total_monthly': 150, # 총 월비용 150만원 이하
@@ -25,6 +25,16 @@ class PropertyParser:
             'max_floor': 2,           # 2층 이하
             'max_management_fee': 30  # 관리비 30만원 이하
         }
+        
+        # Streamlit 필터가 있으면 적용
+        if streamlit_filters:
+            default_conditions.update({
+                'max_deposit': streamlit_filters.get('deposit_max', 2000),
+                'max_monthly_rent': streamlit_filters.get('monthly_rent_max', 130),
+                'min_area_pyeong': streamlit_filters.get('area_min', 20)
+            })
+        
+        self.conditions = default_conditions
         
         # 가격 파싱 정규식
         self.price_patterns = {

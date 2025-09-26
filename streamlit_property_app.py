@@ -359,6 +359,11 @@ def tab_collection():
             st.session_state.collection_started = True
             st.session_state.collection_params = {
                 'districts': districts,
+                'filters': {
+                    'deposit_max': deposit_max,
+                    'monthly_rent_max': rent_max, 
+                    'area_min': area_min
+                },
                 'deposit_range': (deposit_min, deposit_max),
                 'rent_range': (rent_min, rent_max),
                 'area_range': (area_min, area_max)

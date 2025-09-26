@@ -40,8 +40,19 @@ class DistrictCollector:
         # 모듈 초기화
         self.stealth_manager = StealthManager(pool_size=5)
         self.browser_controller = BrowserController()
-        self.api_collector = APICollector(self.stealth_manager)
-        self.property_parser = PropertyParser()
+        
+        # Streamlit 필터를 API 수집기에 전달
+        streamlit_filters = None
+        if streamlit_params:
+            streamlit_filters = {
+                'deposit_max': streamlit_params.get('filters', {}).get('deposit_max', 2000),
+                'monthly_rent_max': streamlit_params.get('filters', {}).get('monthly_rent_max', 130),
+                'area_min': streamlit_params.get('filters', {}).get('area_min', 20)
+            }
+            print(f"         🎯 Streamlit 필터 전달: {streamlit_filters}")
+        
+        self.api_collector = APICollector(self.stealth_manager, streamlit_filters)
+        self.property_parser = PropertyParser(streamlit_filters)
         self.data_processor = PropertyDataProcessor()
         self.progress_manager = get_progress_manager()
         
