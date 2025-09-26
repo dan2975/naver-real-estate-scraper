@@ -387,10 +387,21 @@ def tab_collection():
         if st.session_state.get('collection_started', False) or current_progress.get('status') == 'running':
             st.success("🚀 수집이 진행 중입니다!")
             
-            # 🔄 자동 새로고침 (2초마다)
-            if current_progress.get('status') == 'running':
-                time.sleep(0.1)  # 짧은 대기
-                st.rerun()
+            # 🔄 수동 새로고침 버튼 (WebSocket 오류 방지)
+            col_refresh1, col_refresh2 = st.columns([3, 1])
+            with col_refresh2:
+                if st.button("🔄 새로고침", key="refresh_progress"):
+                    st.rerun()
+            
+            with col_refresh1:
+                last_update = current_progress.get('last_update', '')
+                if last_update:
+                    from datetime import datetime
+                    try:
+                        update_time = datetime.fromisoformat(last_update)
+                        st.caption(f"마지막 업데이트: {update_time.strftime('%H:%M:%S')}")
+                    except:
+                        st.caption("마지막 업데이트: 알 수 없음")
             
             # 메인 진행률 바
             progress_percent = current_progress.get('progress_percent', 0)
