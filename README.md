@@ -34,17 +34,39 @@
 
 ## 📊 수집 성능
 
-- **수집량**: 구별 최대 400개 (총 20,000개 가능)
+- **수집량**: 구별 최대 **4,000개** (200페이지 × 20개)
+- **전체 목표**: 25개 구 × 4,000개 = **100,000개** 매물
 - **조건 부합률**: 16.4% (실제 사용 가능한 매물)
 - **정확도**: 100% 정확한 구별 분류
 - **링크 포함**: 모든 매물의 네이버 링크 완전 수집
+- **속도**: 페이지당 1-3초 (스텔스 모드)
 
 ## 🛠️ 사용법
 
 ### 설치
 ```bash
-pip install playwright requests pandas sqlite3
+# 필수 패키지 설치
+pip install playwright requests pandas streamlit plotly
+
+# 브라우저 설치
 playwright install chromium
+
+# 가상환경 사용 (권장)
+python -m venv venv
+source venv/bin/activate  # macOS/Linux
+# venv\Scripts\activate   # Windows
+```
+
+### ⚡ **빠른 시작**
+```bash
+# 1. 가상환경 활성화
+source venv/bin/activate
+
+# 2. Streamlit UI 시작
+streamlit run streamlit_property_app.py --server.port 4000
+
+# 3. 브라우저에서 http://localhost:4000 접속
+# 4. "🚀 수집" 탭에서 지역 선택 후 수집 시작!
 ```
 
 ### 실행 방법
@@ -64,11 +86,19 @@ python district_collector.py
 python district_button_collector.py
 ```
 
-#### 📊 **결과 확인**
+#### 📊 **Streamlit UI 실행**
 ```bash
-# Streamlit UI로 수집 결과 분석
-streamlit run streamlit_property_app.py
+# Streamlit 웹 앱 시작 (포트 4000)
+streamlit run streamlit_property_app.py --server.port 4000
+
+# 브라우저에서 접속
+open http://localhost:4000
 ```
+
+#### 🎯 **Streamlit 기능**
+- **🚀 수집 탭**: 실시간 매물 수집 (지역/조건 선택 가능)
+- **📊 분석 탭**: 수집된 데이터 시각화 및 통계
+- **🔍 검색 탭**: 조건별 매물 필터링 및 정렬
 
 ## 📁 모듈화된 파일 구조
 
