@@ -263,26 +263,6 @@ class APICollector:
             # 매물 타입
             rlet_tp_nm = prop.get('rletTpNm', '상가') if isinstance(prop, dict) else '상가'
             
-            # 층수 정보 추출 (NoneType 오류 방지)
-            floor_number = None
-            if isinstance(flr_info, str) and flr_info.strip():
-                try:
-                    # "3/10층" 형태에서 현재 층수 추출
-                    if '/' in flr_info:
-                        current_floor_str = flr_info.split('/')[0].strip()
-                        if current_floor_str.startswith('B') and len(current_floor_str) > 1:
-                            # 지하층 처리 (B1 = -1)
-                            basement_num = current_floor_str[1:]
-                            if basement_num.isdigit():
-                                floor_number = -int(basement_num)
-                        elif current_floor_str.isdigit():
-                            floor_number = int(current_floor_str)
-                    elif flr_info.replace('층', '').strip().isdigit():
-                        floor_number = int(flr_info.replace('층', '').strip())
-                except (ValueError, IndexError, AttributeError) as e:
-                    print(f"            ⚠️ 층수 파싱 실패: '{flr_info}' -> {e}")
-                    floor_number = None
-            
             return {
                 'district': district_name,
                 'property_type': rlet_tp_nm,
@@ -292,7 +272,6 @@ class APICollector:
                 'area_pyeong': area_pyeong,
                 'floor': floor,
                 'floor_info': flr_info,
-                'floor_number': floor_number,  # 추가!
                 'building_name': bild_nm,
                 'property_name': atcl_nm,
                 'full_address': full_address,

@@ -78,12 +78,16 @@ class PropertyDataProcessor:
             total_rent = filtered_df['monthly_rent'] + filtered_df['management_fee'].fillna(0)
             filtered_df = filtered_df[total_rent <= self.filter_conditions['max_total_monthly']]
         
-        # 층수 필터
+        # 층수 필터 (None 값 안전 처리)
         if 'floor' in filtered_df.columns:
-            filtered_df = filtered_df[
-                (filtered_df['floor'] >= self.filter_conditions['min_floor']) &
-                (filtered_df['floor'] <= self.filter_conditions['max_floor'])
-            ]
+            # None 값 제외하고 숫자 타입만 필터링
+            floor_valid = filtered_df['floor'].notna() & filtered_df['floor'].apply(lambda x: isinstance(x, (int, float)))
+            if floor_valid.any():
+                filtered_df = filtered_df[
+                    floor_valid &
+                    (filtered_df['floor'] >= self.filter_conditions['min_floor']) &
+                    (filtered_df['floor'] <= self.filter_conditions['max_floor'])
+                ]
         
         # 면적 필터
         if 'area_sqm' in filtered_df.columns:

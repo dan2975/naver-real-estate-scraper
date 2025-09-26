@@ -208,16 +208,16 @@ class PropertyParser:
                 compliance['failed_conditions'].append('면적')
                 compliance['condition_details']['area'] = f"{area_pyeong}평 < {self.conditions['min_area_pyeong']}평"
             
-            # 층수 체크 (있는 경우만, NoneType 안전 처리)
-            floor_number = property_data.get('floor_number')
-            if floor_number is not None and isinstance(floor_number, (int, float)):
+            # 층수 체크 (floor 필드 사용, 이전 성공 코드와 동일)
+            floor = property_data.get('floor')
+            if floor is not None and isinstance(floor, (int, float)):
                 try:
-                    if floor_number < self.conditions['min_floor'] or floor_number > self.conditions['max_floor']:
+                    if floor < self.conditions['min_floor'] or floor > self.conditions['max_floor']:
                         compliance['meets_all_conditions'] = False
                         compliance['failed_conditions'].append('층수')
-                        compliance['condition_details']['floor'] = f"{floor_number}층 (범위: {self.conditions['min_floor']}~{self.conditions['max_floor']}층)"
+                        compliance['condition_details']['floor'] = f"{floor}층 (범위: {self.conditions['min_floor']}~{self.conditions['max_floor']}층)"
                 except (TypeError, ValueError) as e:
-                    print(f"            ⚠️ 층수 비교 오류: floor_number={floor_number}, type={type(floor_number)}, error={e}")
+                    print(f"            ⚠️ 층수 비교 오류: floor={floor}, type={type(floor)}, error={e}")
                     # 층수 정보가 잘못된 경우 조건 실패로 처리하지 않음 (무시)
             
             # 총 월비용 체크 (월세 + 관리비)
@@ -256,14 +256,14 @@ class PropertyParser:
                     enhanced['area_m2'] = area_m2
                     enhanced['area_pyeong'] = area_pyeong
             
-            # 층수 정보가 없으면 텍스트에서 추출 시도 (기존 floor_number 보존)
+            # 층수 정보가 없으면 텍스트에서 추출 시도 (이전 성공 코드 방식)
             if not enhanced.get('floor_info') and raw_text:
                 floor_info, floor_number = self.parse_floor_from_text(raw_text)
                 if floor_info != "정보없음":
                     enhanced['floor_info'] = floor_info
-                    # 기존 floor_number가 없고, 새로 파싱한 값이 유효할 때만 설정
-                    if enhanced.get('floor_number') is None and floor_number is not None:
-                        enhanced['floor_number'] = floor_number
+                    # floor 필드에 숫자 값 설정 (floor_number 대신)
+                    if floor_number is not None and enhanced.get('floor') is None:
+                        enhanced['floor'] = floor_number
             
             # 조건 부합 여부 검사
             compliance = self.check_conditions_compliance(enhanced)
