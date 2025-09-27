@@ -390,7 +390,7 @@ def tab_collection():
         
         # 세션 상태에서 선택된 구 가져오기
         if 'selected_districts' not in st.session_state:
-            st.session_state.selected_districts = ['강남구']
+            st.session_state.selected_districts = ['강동구']  # 강남구 데이터 삭제로 강동구로 변경
         
         districts = st.multiselect(
             "📍 수집 지역", 
