@@ -27,6 +27,10 @@ class PropertyDataProcessor:
             'monthly_rent': 'monthly_rent',
             'area_sqm': 'area_sqm',
             'area_pyeong': 'area_pyeong',
+            'exclusive_area_sqm': 'exclusive_area_sqm',  # 전용면적 (spc1)
+            'exclusive_area_pyeong': 'exclusive_area_pyeong',  # 전용면적 평
+            'contract_area_sqm': 'contract_area_sqm',  # 계약면적 (spc2)
+            'contract_area_pyeong': 'contract_area_pyeong',  # 계약면적 평
             'floor': 'floor',
             'floor_info': None,  # DB에 저장하지 않음
             'building_name': 'building_name',
@@ -60,6 +64,10 @@ class PropertyDataProcessor:
                 full_address TEXT,
                 area_sqm REAL,
                 area_pyeong REAL,
+                exclusive_area_sqm REAL,
+                exclusive_area_pyeong REAL,
+                contract_area_sqm REAL,
+                contract_area_pyeong REAL,
                 floor INTEGER,
                 total_floors INTEGER,
                 floor_display TEXT,
@@ -84,6 +92,119 @@ class PropertyDataProcessor:
         conn.commit()
         conn.close()
     
+    def extract_additional_info(self, raw_data):
+        """추가 정보 추출 (tagList, atclFetrDesc에서)"""
+        import re
+        
+        # tagList에서 정보 추출
+        tags = raw_data.get('tagList', [])
+        
+        # 관리비 정보
+        management_fee_from = None
+        management_fee_to = None
+        for tag in tags:
+            if '관리비' in tag:
+                if '10만원이하' in tag:
+                    management_fee_to = 10
+                elif '20만원이하' in tag:
+                    management_fee_to = 20
+        
+        # 융자금 정보
+        loan_status = None
+        for tag in tags:
+            if '융자금' in tag:
+                if '없는' in tag:
+                    loan_status = '없음'
+                elif '적은' in tag:
+                    loan_status = '적음'
+        
+        # 건물 연식 정보
+        build_year_from = None
+        build_year_to = None
+        for tag in tags:
+            if '년' in tag:
+                if '25년이상' in tag:
+                    build_year_to = 25
+                elif '25년이내' in tag:
+                    build_year_from = 25
+                elif '10년이내' in tag:
+                    build_year_from = 10
+                elif '4년이내' in tag:
+                    build_year_from = 4
+        
+        # 층수 상세 정보
+        floor_detail = None
+        for tag in tags:
+            if any(keyword in tag for keyword in ['지하층', '중층', '지상층', '고층']):
+                floor_detail = tag
+                break
+        
+        # 주차 정보 (태그에서)
+        parking_available_from_tags = None
+        for tag in tags:
+            if '주차가능' in tag:
+                parking_available_from_tags = True
+                break
+        
+        # atclFetrDesc에서 정보 추출
+        desc = raw_data.get('atclFetrDesc', '')
+        
+        # 역세권 정보
+        station_distance = None
+        station_name = None
+        if '역세권' in desc:
+            station_name = '역세권'
+            # 도보 시간 추출
+            distance_match = re.search(r'도보\s*(\d+)분|(\d+)분\s*거리', desc)
+            if distance_match:
+                station_distance = int(distance_match.group(1) or distance_match.group(2))
+        
+        # 시설 정보
+        facilities = []
+        facility_keywords = ['엘베', '주차', '냉난방', '실사진', '리모델링', '깔끔', '수리']
+        for keyword in facility_keywords:
+            if keyword in desc:
+                facilities.append(keyword)
+        
+        # 용도 정보
+        usage_type = []
+        usage_keywords = ['사무실', '상가', '연습실', '교회', '체육시설']
+        for keyword in usage_keywords:
+            if keyword in desc:
+                usage_type.append(keyword)
+        
+        # 조건 정보
+        conditions = []
+        condition_keywords = ['무권리', '권리금', '즉시입주', '업종제한']
+        for keyword in condition_keywords:
+            if keyword in desc:
+                conditions.append(keyword)
+        
+        # 가격 품질 정보
+        price_quality = []
+        price_keywords = ['임대료저렴', '가성비좋', '가성비굿', '저렴', '합리적']
+        for keyword in price_keywords:
+            if keyword in desc:
+                price_quality.append(keyword)
+        
+        return {
+            'management_fee_from_tags': management_fee_from,
+            'management_fee_to_tags': management_fee_to,
+            'loan_status': loan_status,
+            'build_year_from_tags': build_year_from,
+            'build_year_to_tags': build_year_to,
+            'station_distance': station_distance,
+            'station_name': station_name,
+            'facilities': ','.join(facilities) if facilities else None,
+            'usage_type': ','.join(usage_type) if usage_type else None,
+            'conditions': ','.join(conditions) if conditions else None,
+            'price_quality': ','.join(price_quality) if price_quality else None,
+            'broker_name': raw_data.get('cpNm'),
+            'broker_company': raw_data.get('rltrNm'),
+            'floor_detail': floor_detail,
+            'parking_available_from_tags': parking_available_from_tags
+        }
+
     def csv_to_db_dataframe(self, csv_df: pd.DataFrame) -> pd.DataFrame:
         """🔄 CSV 데이터를 DB 형식으로 변환 (스마트 파싱 포함)"""
         import ast
@@ -99,62 +220,58 @@ class PropertyDataProcessor:
         # 🎯 스마트 데이터 파싱 및 보완
         current_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # 🏢 층수 정보 개선 (floor_info에서 총 층수 추출)
-        if 'floor_info' in csv_df.columns:
-            def parse_floor_info(floor_info):
-                if pd.isna(floor_info) or floor_info == '':
-                    return None, None, None
-                
-                floor_str = str(floor_info)
-                
-                # "전체층/15" 패턴
-                if '전체층' in floor_str:
-                    if '/' in floor_str:
-                        total = floor_str.split('/')[1]
-                        try:
-                            total_floors = int(total)
-                            return 0, total_floors, f"전체층 ({total_floors}층 건물)"
-                        except:
-                            return 0, None, "전체층"
-                    else:
-                        return 0, None, "전체층"
-                
-                # "1/4", "B1/5" 등 일반 패턴
+        # 🏢 층수 정보 개선 (flrInfo에서 총 층수 추출)
+        def parse_floor_info(floor_info):
+            if pd.isna(floor_info) or floor_info == '':
+                return None, None, None
+            
+            floor_str = str(floor_info)
+            
+            # "전체층/15" 패턴
+            if '전체층' in floor_str:
                 if '/' in floor_str:
-                    parts = floor_str.split('/')
-                    if len(parts) == 2:
-                        current_part = parts[0].strip()
-                        total_part = parts[1].strip()
+                    total = floor_str.split('/')[1]
+                    try:
+                        total_floors = int(total)
+                        return 0, total_floors, f"전체층 ({total_floors}층 건물)"
+                    except:
+                        return 0, None, "전체층"
+                else:
+                    return 0, None, "전체층"
+            
+            # "1/4", "B1/5" 등 일반 패턴
+            if '/' in floor_str:
+                parts = floor_str.split('/')
+                if len(parts) == 2:
+                    current_part = parts[0].strip()
+                    total_part = parts[1].strip()
+                    
+                    try:
+                        # 현재 층 파싱
+                        if current_part.startswith('B'):
+                            current_floor = -int(current_part[1:])  # B1 → -1
+                            current_display = f"지하{current_part[1:]}층"
+                        else:
+                            current_floor = int(current_part)
+                            current_display = f"{current_part}층"
                         
-                        try:
-                            # 현재 층 파싱
-                            if current_part.startswith('B'):
-                                current_floor = -int(current_part[1:])  # B1 → -1
-                                current_display = f"지하{current_part[1:]}층"
-                            else:
-                                current_floor = int(current_part)
-                                current_display = f"{current_part}층"
-                            
-                            # 총 층수 파싱
-                            total_floors = int(total_part)
-                            
-                            # 표시용 문자열
-                            display = f"{current_display} ({total_floors}층 건물)"
-                            
-                            return current_floor, total_floors, display
-                        except:
-                            pass
-                
-                # 파싱 실패시 기본값
-                return None, None, floor_str
+                        # 총 층수 파싱
+                        total_floors = int(total_part)
+                        
+                        # 표시용 문자열
+                        display = f"{current_display} ({total_floors}층 건물)"
+                        
+                        return current_floor, total_floors, display
+                    except:
+                        pass
             
-            # 각 행에 대해 층수 정보 파싱
-            floor_data = csv_df['floor_info'].apply(parse_floor_info)
-            
-            # 결과를 개별 컬럼으로 분리
-            db_df['floor'] = [item[0] for item in floor_data]
-            db_df['total_floors'] = [item[1] for item in floor_data]
-            db_df['floor_display'] = [item[2] for item in floor_data]
+            # 파싱 실패시 기본값
+            return None, None, floor_str
+        
+        # 층수 정보 초기화
+        db_df['floor'] = None
+        db_df['total_floors'] = None
+        db_df['floor_display'] = None
         
         # building_name 보완 (property_name 우선 사용, NaN 처리)
         if 'property_name' in csv_df.columns:
@@ -215,6 +332,33 @@ class PropertyDataProcessor:
                         row['lat'] = float(lat)
                         row['lng'] = float(lng)
                     
+                    # 🏠 면적 정보 분리 파싱 (spc1: 계약면적, spc2: 전용면적)
+                    spc1 = raw_data.get('spc1', '0')  # 계약면적
+                    spc2 = raw_data.get('spc2', '0')  # 전용면적
+                    
+                    # 문자열을 숫자로 변환하여 처리
+                    try:
+                        spc1_float = float(spc1) if spc1 and spc1 != '0' else 0
+                        spc2_float = float(spc2) if spc2 and spc2 != '0' else 0
+                        
+                        if spc1_float > 0:
+                            row['contract_area_sqm'] = spc1_float
+                            row['contract_area_pyeong'] = round(spc1_float / 3.3058, 1)
+                        
+                        if spc2_float > 0:
+                            row['exclusive_area_sqm'] = spc2_float
+                            row['exclusive_area_pyeong'] = round(spc2_float / 3.3058, 1)
+                        
+                        # 기존 area_sqm, area_pyeong은 전용면적(spc2) 우선, 없으면 계약면적(spc1)
+                        if spc2_float > 0:
+                            row['area_sqm'] = spc2_float
+                            row['area_pyeong'] = round(spc2_float / 3.3058, 1)
+                        elif spc1_float > 0:
+                            row['area_sqm'] = spc1_float
+                            row['area_pyeong'] = round(spc1_float / 3.3058, 1)
+                    except (ValueError, TypeError) as e:
+                        print(f"⚠️ 면적 정보 파싱 오류: {e}")
+                    
                     # 상세주소 보완 (dtlAddr 우선, 없으면 지역구 + 좌표 정보)
                     if pd.isna(row.get('full_address', '')) or row.get('full_address', '') == '':
                         dtl_addr = raw_data.get('dtlAddr', '')
@@ -225,6 +369,27 @@ class PropertyDataProcessor:
                             district = row.get('district', '')
                             if district and lat and lng:
                                 row['full_address'] = f"서울특별시 {district} (위도: {lat}, 경도: {lng})"
+                    
+                    # 🏢 층수 정보 파싱 (flrInfo에서)
+                    flr_info = raw_data.get('flrInfo', '')
+                    if flr_info:
+                        try:
+                            floor_data = parse_floor_info(flr_info)
+                            if floor_data[0] is not None:  # 파싱 성공
+                                row['floor'] = floor_data[0]
+                                row['total_floors'] = floor_data[1]
+                                row['floor_display'] = floor_data[2]
+                        except Exception as e:
+                            print(f"⚠️ 층수 정보 파싱 오류: {e}")
+                    
+                    # 🎯 추가 정보 추출 및 저장
+                    try:
+                        additional_info = self.extract_additional_info(raw_data)
+                        for key, value in additional_info.items():
+                            row[key] = value
+                        print(f"✅ 추가 정보 추출 완료: {len(additional_info)}개 필드")
+                    except Exception as e:
+                        print(f"⚠️ 추가 정보 추출 오류: {e}")
                     
                     return row
                 except Exception as e:
@@ -258,6 +423,48 @@ class PropertyDataProcessor:
                     if 'near_station' not in db_df.columns:
                         db_df['near_station'] = False
                     db_df.at[idx, 'near_station'] = parsed_row['near_station']
+                
+                # 🏢 층수 정보 적용
+                if 'floor' in parsed_row and parsed_row['floor'] is not None:
+                    if 'floor' not in db_df.columns:
+                        db_df['floor'] = None
+                    db_df.at[idx, 'floor'] = parsed_row['floor']
+                
+                if 'total_floors' in parsed_row and parsed_row['total_floors'] is not None:
+                    if 'total_floors' not in db_df.columns:
+                        db_df['total_floors'] = None
+                    db_df.at[idx, 'total_floors'] = parsed_row['total_floors']
+                
+                if 'floor_display' in parsed_row and parsed_row['floor_display'] is not None:
+                    if 'floor_display' not in db_df.columns:
+                        db_df['floor_display'] = None
+                    db_df.at[idx, 'floor_display'] = parsed_row['floor_display']
+                
+                # 🏠 면적 정보 적용
+                area_columns = [
+                    'exclusive_area_sqm', 'exclusive_area_pyeong', 
+                    'contract_area_sqm', 'contract_area_pyeong'
+                ]
+                
+                for col in area_columns:
+                    if col in parsed_row:
+                        if col not in db_df.columns:
+                            db_df[col] = None
+                        db_df.at[idx, col] = parsed_row[col]
+                
+                # 🎯 추가 정보 컬럼들 적용
+                additional_columns = [
+                    'management_fee_from_tags', 'management_fee_to_tags', 'loan_status',
+                    'build_year_from_tags', 'build_year_to_tags', 'station_distance', 'station_name',
+                    'facilities', 'usage_type', 'conditions', 'price_quality',
+                    'broker_name', 'broker_company', 'floor_detail', 'parking_available_from_tags'
+                ]
+                
+                for col in additional_columns:
+                    if col in parsed_row:
+                        if col not in db_df.columns:
+                            db_df[col] = None
+                        db_df.at[idx, col] = parsed_row[col]
                 
                 if 'full_address' in parsed_row:
                     if 'full_address' not in db_df.columns:
@@ -578,11 +785,30 @@ class PropertyDataProcessor:
                     (filtered_df['floor'] <= self.filter_conditions['max_floor'])
                 ]
         
-        # 면적 필터
-        if 'area_sqm' in filtered_df.columns:
-            # 20평 = 66㎡로 변환
-            area_pyeong = filtered_df['area_sqm'] / 3.306
-            filtered_df = filtered_df[area_pyeong >= self.filter_conditions['min_area_pyeong']]
+        # 면적 필터 (전용면적 기준 20평 이상)
+        if 'exclusive_area_pyeong' in filtered_df.columns:
+            try:
+                # 안전한 숫자 변환: 에러 발생 시 0으로 처리
+                area_numeric = pd.to_numeric(filtered_df['exclusive_area_pyeong'], errors='coerce')
+                # 유효한 숫자 값만 필터링 (NaN 제외)
+                area_valid = area_numeric.notna()
+                if area_valid.any():
+                    filtered_df = filtered_df[
+                        area_valid &
+                        (area_numeric >= self.filter_conditions['min_area_pyeong'])
+                    ]
+            except Exception as e:
+                print(f"면적 필터링 오류: {e}")
+        elif 'area_sqm' in filtered_df.columns:
+            try:
+                # 안전한 숫자 변환: 에러 발생 시 0으로 처리
+                area_sqm_numeric = pd.to_numeric(filtered_df['area_sqm'], errors='coerce')
+                area_valid = area_sqm_numeric.notna()
+                if area_valid.any():
+                    area_pyeong = area_sqm_numeric / 3.306
+                    filtered_df = filtered_df[area_valid & (area_pyeong >= self.filter_conditions['min_area_pyeong'])]
+            except Exception as e:
+                print(f"면적 필터링 오류: {e}")
         
         # 관리비 필터
         if 'management_fee' in filtered_df.columns:
@@ -802,10 +1028,19 @@ class PropertyDataProcessor:
         # 면적 범위 필터
         if 'area_range' in filter_conditions and 'area_pyeong' in filtered_df.columns:
             min_area, max_area = filter_conditions['area_range']
-            filtered_df = filtered_df[
-                (filtered_df['area_pyeong'] >= min_area) &
-                (filtered_df['area_pyeong'] <= max_area)
-            ]
+            try:
+                # 안전한 숫자 변환: 에러 발생 시 0으로 처리
+                area_numeric = pd.to_numeric(filtered_df['area_pyeong'], errors='coerce')
+                # 유효한 숫자 값만 필터링 (NaN 제외)
+                area_valid = area_numeric.notna()
+                if area_valid.any():
+                    filtered_df = filtered_df[
+                        area_valid &
+                        (area_numeric >= min_area) &
+                        (area_numeric <= max_area)
+                    ]
+            except Exception as e:
+                print(f"면적 범위 필터링 오류: {e}")
         
         return filtered_df
     

@@ -208,12 +208,38 @@ def apply_enhanced_filters(df, districts=None, deposit_range=None, rent_range=No
                 (filtered['floor'] != 0)
             ]
     
-    # 면적 범위
-    if area_range and 'area_pyeong' in filtered.columns:
-        filtered = filtered[
-            (filtered['area_pyeong'] >= area_range[0]) &
-            (filtered['area_pyeong'] <= area_range[1])
-        ]
+    # 면적 범위 (전용면적 기준)
+    if area_range:
+        # 전용면적이 있으면 전용면적 기준으로 필터링
+        if 'exclusive_area_pyeong' in filtered.columns:
+            try:
+                # 안전한 숫자 변환: 에러 발생 시 0으로 처리
+                area_numeric = pd.to_numeric(filtered['exclusive_area_pyeong'], errors='coerce')
+                # 유효한 숫자 값만 필터링 (NaN 제외)
+                area_valid = area_numeric.notna()
+                if area_valid.any():
+                    filtered = filtered[
+                        area_valid &
+                        (area_numeric >= area_range[0]) &
+                        (area_numeric <= area_range[1])
+                    ]
+            except Exception as e:
+                print(f"면적 필터링 오류: {e}")
+        # 전용면적이 없으면 기존 area_pyeong 기준으로 필터링
+        elif 'area_pyeong' in filtered.columns:
+            try:
+                # 안전한 숫자 변환: 에러 발생 시 0으로 처리
+                area_numeric = pd.to_numeric(filtered['area_pyeong'], errors='coerce')
+                # 유효한 숫자 값만 필터링 (NaN 제외)
+                area_valid = area_numeric.notna()
+                if area_valid.any():
+                    filtered = filtered[
+                        area_valid &
+                        (area_numeric >= area_range[0]) &
+                        (area_numeric <= area_range[1])
+                    ]
+            except Exception as e:
+                print(f"면적 필터링 오류: {e}")
     
     return filtered
 
@@ -950,17 +976,17 @@ def tab_results():
         else:
             st.caption("ℹ️ 0층(건물 전체) 제외됨")
     
-    # 면적 범위 (별도 행)
-    st.markdown("**📐 면적 범위**")
+    # 면적 범위 (전용면적 기준)
+    st.markdown("**📐 면적 범위 (전용면적 기준)**")
     col4, col5 = st.columns(2)
     with col4:
         filter_area_min = st.number_input(
-            "최소 평", min_value=0.0, max_value=200.0, value=20.0, step=1.0,
+            "최소 평 (전용면적)", min_value=0.0, max_value=200.0, value=20.0, step=1.0,
             key="filter_area_min"
         )
     with col5:
         filter_area_max = st.number_input(
-            "최대 평", min_value=0.0, max_value=200.0, value=100.0, step=1.0,
+            "최대 평 (전용면적)", min_value=0.0, max_value=200.0, value=100.0, step=1.0,
             key="filter_area_max"
         )
     
@@ -994,13 +1020,19 @@ def tab_results():
         
         st.info("💡 좌우 스크롤하여 모든 데이터를 확인할 수 있습니다")
         
-        # DB 컬럼 순서대로 정렬 (25개 전체)
+        # DB 컬럼 순서대로 정렬 (46개 전체)
         db_column_order = [
             'id', 'region', 'district', 'building_name', 'full_address',
-            'area_sqm', 'area_pyeong', 'floor', 'total_floors', 'floor_display', 
+            'area_sqm', 'area_pyeong', 'exclusive_area_sqm', 'exclusive_area_pyeong', 
+            'contract_area_sqm', 'contract_area_pyeong', 'floor', 'total_floors', 'floor_display', 
             'deposit', 'monthly_rent', 'management_fee', 'total_monthly_cost', 'ceiling_height',
             'parking_available', 'near_station', 'build_year', 'naver_link',
-            'data_source', 'score', 'labels', 'collected_at', 'raw_text', 'created_at'
+            'data_source', 'score', 'labels', 'collected_at', 'raw_text', 'created_at',
+            # 추가 컬럼들 (15개)
+            'management_fee_from_tags', 'management_fee_to_tags', 'loan_status',
+            'build_year_from_tags', 'build_year_to_tags', 'station_distance', 'station_name',
+            'facilities', 'usage_type', 'conditions', 'price_quality',
+            'broker_name', 'broker_company', 'floor_detail', 'parking_available_from_tags'
         ]
         
         # 표시 모드에 따른 컬럼 선택
@@ -1013,9 +1045,9 @@ def tab_results():
             selected_order = core_columns
             st.caption("📌 핵심 10개 컬럼만 표시")
         else:
-            # 전체 25개 컬럼
+            # 전체 42개 컬럼
             selected_order = db_column_order
-            st.caption("📌 전체 25개 컬럼 표시")
+            st.caption("📌 전체 42개 컬럼 표시")
         
         # 실제 존재하는 컬럼만 선택
         available_columns = [col for col in selected_order if col in filtered_df.columns]
@@ -1024,7 +1056,7 @@ def tab_results():
         if missing_columns:
             st.caption(f"⚠️ 누락된 컬럼: {', '.join(missing_columns)}")
         
-        # 한글 컬럼명 매핑 (25개 전체)
+        # 한글 컬럼명 매핑 (46개 전체)
         column_config = {
             'id': st.column_config.NumberColumn('ID', width="small"),
             'region': '지역',
@@ -1033,6 +1065,10 @@ def tab_results():
             'full_address': '주소',
             'area_sqm': st.column_config.NumberColumn('면적(㎡)', format="%.1f"),
             'area_pyeong': st.column_config.NumberColumn('면적(평)', format="%.1f"),
+            'exclusive_area_sqm': st.column_config.NumberColumn('전용면적(㎡)', format="%.1f"),
+            'exclusive_area_pyeong': st.column_config.NumberColumn('전용면적(평)', format="%.1f"),
+            'contract_area_sqm': st.column_config.NumberColumn('계약면적(㎡)', format="%.1f"),
+            'contract_area_pyeong': st.column_config.NumberColumn('계약면적(평)', format="%.1f"),
             'floor': st.column_config.NumberColumn('층수'),
             'total_floors': st.column_config.NumberColumn('총층수'),
             'floor_display': '층수정보',
@@ -1050,7 +1086,23 @@ def tab_results():
             'labels': '라벨',
             'collected_at': st.column_config.DatetimeColumn('수집일시'),
             'raw_text': st.column_config.TextColumn('원시데이터', width="large"),
-            'created_at': st.column_config.DatetimeColumn('생성일시')
+            'created_at': st.column_config.DatetimeColumn('생성일시'),
+            # 추가 컬럼들 (15개)
+            'management_fee_from_tags': st.column_config.NumberColumn('관리비(태그)하한'),
+            'management_fee_to_tags': st.column_config.NumberColumn('관리비(태그)상한'),
+            'loan_status': '융자금상태',
+            'build_year_from_tags': st.column_config.NumberColumn('건물연식(태그)하한'),
+            'build_year_to_tags': st.column_config.NumberColumn('건물연식(태그)상한'),
+            'station_distance': st.column_config.NumberColumn('역거리(분)'),
+            'station_name': '역명',
+            'facilities': '시설',
+            'usage_type': '용도',
+            'conditions': '조건',
+            'price_quality': '가격품질',
+            'broker_name': '중개사명',
+            'broker_company': '중개사법인',
+            'floor_detail': '층수상세',
+            'parking_available_from_tags': st.column_config.CheckboxColumn('주차가능(태그)')
         }
         
         # 컬럼 개수 표시
