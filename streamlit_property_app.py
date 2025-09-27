@@ -81,13 +81,6 @@ if 'collection_params' not in st.session_state:
 if 'collection_progress' not in st.session_state:
     st.session_state.collection_progress = 0
 
-# API 전용 수집 세션 상태 초기화
-if 'api_collection_started' not in st.session_state:
-    st.session_state.api_collection_started = False
-if 'api_collection_progress' not in st.session_state:
-    st.session_state.api_collection_progress = 0
-if 'api_collection_status' not in st.session_state:
-    st.session_state.api_collection_status = ""
 if 'collection_status' not in st.session_state:
     st.session_state.collection_status = ""
 
@@ -307,85 +300,6 @@ def run_collection_in_background(params):
     except Exception as e:
         st.session_state.collection_status = f"❌ 하이브리드 수집 오류: {str(e)}"
 
-def run_api_collection_in_background(params):
-    """백그라운드에서 API 전용 수집 실행 (progress_manager 통합)"""
-    try:
-        # progress_manager 가져오기 (district_collector와 동일한 방식)
-        try:
-            from progress_manager import get_progress_manager
-            progress_manager = get_progress_manager()
-            use_progress_manager = True
-        except ImportError:
-            progress_manager = None
-            use_progress_manager = False
-        
-        # 초기화
-        st.session_state.api_collection_status = "⚡ API 전용 수집 시스템 초기화..."
-        st.session_state.api_collection_progress = 5
-        
-        # 선택된 지역 수 확인
-        selected_districts = params.get('districts', [])
-        total_districts = len(selected_districts)
-        estimated_total = total_districts * 1000  # 구별 예상 1000개씩
-        
-        # progress_manager 시작 (district_collector 방식)
-        if use_progress_manager:
-            progress_manager.start_collection(selected_districts, estimated_total)
-        
-        st.session_state.api_collection_status = f"📍 {total_districts}개 지역 수집 준비 중..."
-        st.session_state.api_collection_progress = 10
-        
-        # api_only_collector 임포트 및 실행
-        from api_only_collector import run_streamlit_api_collection_sync
-        
-        st.session_state.api_collection_status = "⚡ 하드코딩 좌표로 API 직접 호출 시작..."
-        st.session_state.api_collection_progress = 15
-        
-        # 지역별 진행률 업데이트 (progress_manager 통합)
-        for i, district in enumerate(selected_districts):
-            if use_progress_manager:
-                progress_manager.update_district_start(district, i)
-            
-            progress = 20 + (i / total_districts) * 60  # 20% ~ 80%
-            st.session_state.api_collection_status = f"📍 {district} 수집 중... ({i+1}/{total_districts})"
-            st.session_state.api_collection_progress = int(progress)
-        
-        # 전체 수집 실행
-        properties = run_streamlit_api_collection_sync(params)
-        
-        # 각 지역 완료 처리 (progress_manager)
-        if use_progress_manager and properties:
-            # 지역별 매물 수 추정 (전체를 지역 수로 나눔)
-            properties_per_district = len(properties) // total_districts if total_districts > 0 else len(properties)
-            for district in selected_districts:
-                progress_manager.update_district_complete(district, properties_per_district)
-        
-        st.session_state.api_collection_status = f"💾 {total_districts}개 지역 데이터 저장 중..."
-        st.session_state.api_collection_progress = 85
-        
-        # 결과 처리
-        st.session_state.api_collection_status = "📊 수집 결과 분석 중..."
-        st.session_state.api_collection_progress = 95
-        
-        # 완료
-        st.session_state.api_collection_progress = 100
-        
-        # progress_manager 완료 처리
-        if use_progress_manager:
-            progress_manager.complete_collection(len(properties) if properties else 0, success=True)
-        
-        if properties and len(properties) > 0:
-            st.session_state.api_collection_status = f"✅ API 전용 수집 완료! {len(properties):,}개 매물 수집 (지역: {', '.join(selected_districts)})"
-        else:
-            st.session_state.api_collection_status = "⚠️ API 전용 수집 완료되었으나 조건에 맞는 매물이 없습니다"
-            
-    except Exception as e:
-        st.session_state.api_collection_status = f"❌ API 전용 수집 오류: {str(e)}"
-        st.session_state.api_collection_progress = 0
-        
-        # progress_manager 오류 처리
-        if use_progress_manager and progress_manager:
-            progress_manager.complete_collection(0, success=False)
 
 def tab_collection():
     """Tab 1: 🚀 수집"""
@@ -523,60 +437,22 @@ def tab_collection():
             area_min <= area_max
         )
         
-        # 수집 방식 선택 및 버튼
-        st.subheader("📋 수집 방식 선택")
+        # 수집 시작 버튼
+        st.subheader("🚀 매물 수집 시작")
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**🌐 하이브리드 수집 (기존)**")
-            st.caption("✅ 브라우저 + API 조합")
-            st.caption("✅ 최고 정확도")
-            st.caption("⚠️ 느린 속도 (브라우저 필요)")
-            
-            if st.button(
-                "🌐 하이브리드 수집 시작", 
-                type="primary", 
-                disabled=not conditions_valid,
-                key="hybrid_collection"
-            ):
-                st.session_state.collection_started = True
-                st.session_state.collection_params = {
-                    'districts': districts,
-                    'filters': {
-                        'deposit_max': deposit_max,
-                        'monthly_rent_max': rent_max, 
-                        'area_min': area_min
-                    },
-                    'deposit_range': (deposit_min, deposit_max),
-                    'rent_range': (rent_min, rent_max),
-                    'area_range': (area_min, area_max)
-                }
-                st.session_state.collection_progress = 0
-                st.session_state.collection_status = "하이브리드 수집 시작..."
-                
-                # 백그라운드 하이브리드 수집 시작
-                thread = threading.Thread(
-                    target=run_collection_in_background, 
-                    args=(st.session_state.collection_params,)
-                )
-                thread.start()
-                st.rerun()
-
-    with col2:
-        st.markdown("**⚡ API 전용 수집 (신규)**")
-        st.caption("⚡ API만 사용 (브라우저 없음)")
-        st.caption("⚡ 3-5배 빠른 속도")
-        st.caption("✅ 하드코딩 좌표 사용")
+        st.markdown("**🌐 하이브리드 수집**")
+        st.caption("✅ 브라우저 + API 조합")
+        st.caption("✅ 최고 정확도")
+        st.caption("⚠️ 느린 속도 (브라우저 필요)")
         
         if st.button(
-            "⚡ API 전용 수집 시작", 
-            type="secondary", 
+            "🚀 하이브리드 수집 시작", 
+            type="primary", 
             disabled=not conditions_valid,
-            key="api_collection"
+            key="hybrid_collection"
         ):
-            st.session_state.api_collection_started = True
-            st.session_state.api_collection_params = {
+            st.session_state.collection_started = True
+            st.session_state.collection_params = {
                 'districts': districts,
                 'filters': {
                     'deposit_max': deposit_max,
@@ -587,277 +463,158 @@ def tab_collection():
                 'rent_range': (rent_min, rent_max),
                 'area_range': (area_min, area_max)
             }
-            st.session_state.api_collection_progress = 0
-            st.session_state.api_collection_status = "API 전용 수집 시작..."
+            st.session_state.collection_progress = 0
+            st.session_state.collection_status = "하이브리드 수집 시작..."
             
-            # 백그라운드 API 전용 수집 시작
+            # 백그라운드 하이브리드 수집 시작
             thread = threading.Thread(
-                target=run_api_collection_in_background, 
-                args=(st.session_state.api_collection_params,)
+                target=run_collection_in_background, 
+                args=(st.session_state.collection_params,)
             )
             thread.start()
             st.rerun()
 
+
     # 진행률 표시 섹션
     st.subheader("📊 수집 진행률")
     
-    col3, col4 = st.columns(2)
+    # 진행률 표시
+    # 실시간 진행률 표시
+    progress_manager = get_progress_manager()
+    current_progress = progress_manager.get_progress()
     
-    with col3:
-        st.markdown("**🌐 하이브리드 수집**")
-        # 실시간 진행률 표시
-        progress_manager = get_progress_manager()
-        current_progress = progress_manager.get_progress()
+    if st.session_state.get('collection_started', False) or current_progress.get('status') == 'running':
+        st.success("🚀 수집이 진행 중입니다!")
         
-        if st.session_state.get('collection_started', False) or current_progress.get('status') == 'running':
-            st.success("🚀 수집이 진행 중입니다!")
+        # 🔄 수동 새로고침 버튼 (WebSocket 오류 방지)
+        col_refresh1, col_refresh2 = st.columns([3, 1])
+        with col_refresh2:
+            if st.button("🔄 새로고침", key="refresh_progress"):
+                st.rerun()
+        
+        with col_refresh1:
+            last_update = current_progress.get('last_update', '')
+            if last_update:
+                from datetime import datetime
+                try:
+                    update_time = datetime.fromisoformat(last_update)
+                    st.caption(f"마지막 업데이트: {update_time.strftime('%H:%M:%S')}")
+                except:
+                    st.caption("마지막 업데이트: 알 수 없음")
+        
+        # 메인 진행률 바 (브라우저 기준)
+        progress_percent = current_progress.get('progress_percent', 0)
+        current_collected = current_progress.get('current_district_properties', 0)
+        browser_totals = current_progress.get('browser_totals', {})
+        current_district = current_progress.get('current_district', '')
+        browser_total = browser_totals.get(current_district, 0)
+        
+        # 브라우저 총 매물 수가 있으면 실시간 재계산
+        if browser_total > 0 and current_collected > 0:
+            real_progress = min((current_collected / browser_total) * 100, 100)
+            st.progress(real_progress / 100, text=f"전체 진행률: {real_progress:.1f}% ({current_collected}/{browser_total}개)")
             
-            # 🔄 수동 새로고침 버튼 (WebSocket 오류 방지)
-            col_refresh1, col_refresh2 = st.columns([3, 1])
-            with col_refresh2:
-                if st.button("🔄 새로고침", key="refresh_progress"):
-                    st.rerun()
+            # 중복 통계 표시
+            if current_collected > browser_total:
+                duplicate_count = current_collected - browser_total
+                efficiency = (browser_total / current_collected) * 100 if current_collected > 0 else 0
+                st.info(f"📊 중복 제거: {duplicate_count}개 중복 감지됨 (효율성: {efficiency:.1f}%)")
+                st.caption(f"✅ 유니크 매물: {browser_total}개 / 전체 수집: {current_collected}개")
+        else:
+            st.progress(progress_percent / 100, text=f"전체 진행률: {progress_percent:.1f}%")
+        
+        # 상세 진행 정보
+        col2_1, col2_2 = st.columns(2)
+        
+        with col2_1:
+            st.metric(
+                "📍 현재 지역", 
+                current_progress.get('current_district', '대기 중'),
+                f"{current_progress.get('district_index', 0) + 1}/{current_progress.get('total_districts', 0)}"
+            )
             
-            with col_refresh1:
-                last_update = current_progress.get('last_update', '')
-                if last_update:
-                    from datetime import datetime
-                    try:
-                        update_time = datetime.fromisoformat(last_update)
-                        st.caption(f"마지막 업데이트: {update_time.strftime('%H:%M:%S')}")
-                    except:
-                        st.caption("마지막 업데이트: 알 수 없음")
-            
-            # 메인 진행률 바 (브라우저 기준)
-            progress_percent = current_progress.get('progress_percent', 0)
-            current_collected = current_progress.get('current_district_properties', 0)
-            browser_totals = current_progress.get('browser_totals', {})
-            current_district = current_progress.get('current_district', '')
-            browser_total = browser_totals.get(current_district, 0)
-            
-            # 브라우저 총 매물 수가 있으면 실시간 재계산
-            if browser_total > 0 and current_collected > 0:
-                real_progress = min((current_collected / browser_total) * 100, 100)
-                st.progress(real_progress / 100, text=f"전체 진행률: {real_progress:.1f}% ({current_collected}/{browser_total}개)")
-                
-                # 중복 통계 표시
-                if current_collected > browser_total:
-                    duplicate_count = current_collected - browser_total
-                    efficiency = (browser_total / current_collected) * 100 if current_collected > 0 else 0
-                    st.info(f"📊 중복 제거: {duplicate_count}개 중복 감지됨 (효율성: {efficiency:.1f}%)")
-                    st.caption(f"✅ 유니크 매물: {browser_total}개 / 전체 수집: {current_collected}개")
+            st.metric(
+                "📄 현재 페이지",
+                current_progress.get('current_page', 0),
+                f"진행 중..."
+            )
+        
+        with col2_2:
+            # 브라우저 감지 총 매물 수 기준으로 표시
+            if browser_total > 0:
+                st.metric(
+                    "🏠 수집된 매물", 
+                    f"{current_collected:,}개",
+                    f"목표: {browser_total:,}개"
+                )
             else:
-                st.progress(progress_percent / 100, text=f"전체 진행률: {progress_percent:.1f}%")
-            
-            # 상세 진행 정보
-            col2_1, col2_2 = st.columns(2)
-            
-            with col2_1:
                 st.metric(
-                    "📍 현재 지역", 
-                    current_progress.get('current_district', '대기 중'),
-                    f"{current_progress.get('district_index', 0) + 1}/{current_progress.get('total_districts', 0)}"
-                )
-                
-                st.metric(
-                    "📄 현재 페이지",
-                    current_progress.get('current_page', 0),
-                    f"진행 중..."
+                    "🏠 수집된 매물",
+                    f"{current_progress.get('current_properties_collected', 0):,}개",
+                    f"목표: {current_progress.get('total_properties_target', 0):,}개"
                 )
             
-            with col2_2:
-                # 브라우저 감지 총 매물 수 기준으로 표시
-                if browser_total > 0:
-                    st.metric(
-                        "🏠 수집된 매물", 
-                        f"{current_collected:,}개",
-                        f"목표: {browser_total:,}개"
-                    )
-                else:
-                    st.metric(
-                        "🏠 수집된 매물",
-                        f"{current_progress.get('current_properties_collected', 0):,}개",
-                        f"목표: {current_progress.get('total_properties_target', 0):,}개"
-                    )
-                
-                # 예상 완료 시간
-                remaining = current_progress.get('estimated_remaining_seconds')
-                if remaining:
-                    remaining_min = int(remaining / 60)
-                    remaining_sec = int(remaining % 60)
-                    st.metric("⏱️ 예상 완료", f"{remaining_min}분 {remaining_sec}초")
-                else:
-                    st.metric("⏱️ 예상 완료", "계산 중...")
-            
-            # 현재 상태
-            current_step = current_progress.get('current_step', '진행 중...')
-            st.info(f"🔄 {current_step}")
-            
-            # 완료된 지역 목록
-            completed = current_progress.get('completed_districts', [])
-            if completed:
-                with st.expander(f"✅ 완료된 지역 ({len(completed)}개)"):
-                    for district in completed:
-                        st.write(f"• {district.get('name', '')}: {district.get('properties', 0)}개")
-            
-            # 오류 목록
-            errors = current_progress.get('errors', [])
-            if errors:
-                with st.expander(f"⚠️ 오류 로그 ({len(errors)}개)", expanded=False):
-                    for error in errors[-5:]:  # 최근 5개만 표시
-                        st.error(f"{error.get('timestamp', '')}: {error.get('message', '')}")
-            
-            # 수집 파라미터 표시
-            params = st.session_state.get('collection_params', {})
-            if params:
-                with st.expander("🔧 수집 파라미터"):
-                    st.json(params)
-            
-            # 수집 중지 버튼
-            if current_progress.get('status') == 'running':
-                if st.button("🛑 수집 중지", type="secondary"):
-                    # 중지 요청 전송
-                    progress_manager.request_stop()
-                    st.session_state.collection_started = False
-                    st.success("🛑 수집 중지 요청을 전송했습니다. 잠시 후 중지됩니다...")
-                    st.rerun()
-                    
-        else:
-            st.info("🎯 필터 조건을 설정하고 '수집 시작'을 눌러주세요")
-            
-            # 이전 수집 결과가 있다면 표시
-            if current_progress.get('status') == 'completed':
-                st.success(f"✅ 이전 수집 완료: {current_progress.get('current_properties_collected', 0)}개 매물")
-                
-                if st.button("🔄 진행률 초기화"):
-                    progress_manager.reset_progress()
-                    st.rerun()
-            
-            # 조건 유효성 검사 메시지
-            if not conditions_valid:
-                if len(districts) == 0:
-                    st.warning("📍 최소 1개 지역을 선택해주세요")
-                for error in validation_errors:
-                    st.error(error.replace("⚠️ ", ""))
-    
-    with col4:
-        st.markdown("**⚡ API 전용 수집**")
+            # 예상 완료 시간
+            remaining = current_progress.get('estimated_remaining_seconds')
+            if remaining:
+                remaining_min = int(remaining / 60)
+                remaining_sec = int(remaining % 60)
+                st.metric("⏱️ 예상 완료", f"{remaining_min}분 {remaining_sec}초")
+            else:
+                st.metric("⏱️ 예상 완료", "계산 중...")
         
-        # API 전용 수집 진행률 표시 (progress_manager 통합)
-        if st.session_state.get('api_collection_started', False):
-            st.success("🚀 API 전용 수집이 진행 중입니다!")
-            
-            # 🔄 수동 새로고침 버튼
-            col_refresh3, col_refresh4 = st.columns([3, 1])
-            with col_refresh4:
-                if st.button("🔄 새로고침", key="refresh_api_progress"):
-                    st.rerun()
-            
-            # progress_manager에서 실시간 진행률 가져오기 (하이브리드와 동일)
-            try:
-                progress_manager = get_progress_manager()
-                current_progress = progress_manager.get_progress()
+        # 현재 상태
+        current_step = current_progress.get('current_step', '진행 중...')
+        st.info(f"🔄 {current_step}")
+        
+        # 완료된 지역 목록
+        completed = current_progress.get('completed_districts', [])
+        if completed:
+            with st.expander(f"✅ 완료된 지역 ({len(completed)}개)"):
+                for district in completed:
+                    st.write(f"• {district.get('name', '')}: {district.get('properties', 0)}개")
+        
+        # 오류 목록
+        errors = current_progress.get('errors', [])
+        if errors:
+            with st.expander(f"⚠️ 오류 로그 ({len(errors)}개)", expanded=False):
+                for error in errors[-5:]:  # 최근 5개만 표시
+                    st.error(f"{error.get('timestamp', '')}: {error.get('message', '')}")
+        
+        # 수집 파라미터 표시
+        params = st.session_state.get('collection_params', {})
+        if params:
+            with st.expander("🔧 수집 파라미터"):
+                st.json(params)
+        
+        # 수집 중지 버튼
+        if current_progress.get('status') == 'running':
+            if st.button("🛑 수집 중지", type="secondary"):
+                # 중지 요청 전송
+                progress_manager.request_stop()
+                st.session_state.collection_started = False
+                st.success("🛑 수집 중지 요청을 전송했습니다. 잠시 후 중지됩니다...")
+                st.rerun()
                 
-                # progress_manager 기반 진행률 (더 정확함)
-                if current_progress.get('status') == 'running':
-                    progress_percent = current_progress.get('progress_percent', 0)
-                    current_collected = current_progress.get('current_properties_collected', 0)
-                    total_target = current_progress.get('total_properties_target', 0)
-                    current_district = current_progress.get('current_district', '')
-                    
-                    # 메인 진행률 바 (progress_manager 기반)
-                    st.progress(progress_percent / 100, text=f"전체 진행률: {progress_percent:.1f}% ({current_collected}/{total_target}개)")
-                    
-                    # 상세 진행 정보 (하이브리드와 동일한 레이아웃)
-                    api_col1, api_col2 = st.columns(2)
-                    
-                    with api_col1:
-                        st.metric(
-                            "📍 현재 지역", 
-                            current_district or '수집 중...',
-                            f"{current_progress.get('district_index', 0) + 1}/{current_progress.get('total_districts', 0)}"
-                        )
-                    
-                    with api_col2:
-                        st.metric(
-                            "🏠 수집된 매물", 
-                            f"{current_collected:,}개",
-                            f"목표: {total_target:,}개"
-                        )
-                    
-                    # 현재 상태 (progress_manager에서)
-                    current_step = current_progress.get('current_step', '진행 중...')
-                    st.info(f"🔄 {current_step}")
-                    
-                else:
-                    # 폴백: session_state 기반 진행률
-                    api_progress = st.session_state.get('api_collection_progress', 0)
-                    api_status = st.session_state.get('api_collection_status', '대기 중...')
-                    st.progress(api_progress / 100, text=f"진행률: {api_progress}%")
-                    st.info(f"🔄 {api_status}")
-                    
-            except:
-                # 오류 시 폴백: session_state 기반 진행률
-                api_progress = st.session_state.get('api_collection_progress', 0)
-                api_status = st.session_state.get('api_collection_status', '대기 중...')
-                st.progress(api_progress / 100, text=f"진행률: {api_progress}%")
-                st.info(f"🔄 {api_status}")
+    else:
+        st.info("🎯 필터 조건을 설정하고 '수집 시작'을 눌러주세요")
+        
+        # 이전 수집 결과가 있다면 표시
+        if current_progress.get('status') == 'completed':
+            st.success(f"✅ 이전 수집 완료: {current_progress.get('current_properties_collected', 0)}개 매물")
             
-            # API 수집 파라미터 표시
-            api_params = st.session_state.get('api_collection_params', {})
-            if api_params:
-                with st.expander("🔧 API 수집 파라미터"):
-                    st.json(api_params)
-            
-            # API 수집 완료 시 결과 표시
-            api_progress = st.session_state.get('api_collection_progress', 0)
-            if api_progress >= 100:
-                st.success("✅ API 전용 수집이 완료되었습니다!")
-                
-                if st.button("🔄 API 진행률 초기화", key="reset_api_progress"):
-                    st.session_state.api_collection_started = False
-                    st.session_state.api_collection_progress = 0
-                    st.session_state.api_collection_status = ""
-                    # progress_manager도 초기화
-                    try:
-                        progress_manager = get_progress_manager()
-                        progress_manager.reset_progress()
-                    except:
-                        pass
-                    st.rerun()
-                    
-        else:
-            st.info("⚡ 필터 조건을 설정하고 'API 전용 수집 시작'을 눌러주세요")
-            
-            # 조건 유효성 검사 메시지
-            if not conditions_valid:
-                if len(districts) == 0:
-                    st.warning("📍 최소 1개 지역을 선택해주세요")
-                for error in validation_errors:
-                    st.error(error.replace("⚠️ ", ""))
+            if st.button("🔄 진행률 초기화"):
+                progress_manager.reset_progress()
+                st.rerun()
+        
+        # 조건 유효성 검사 메시지
+        if not conditions_valid:
+            if len(districts) == 0:
+                st.warning("📍 최소 1개 지역을 선택해주세요")
+            for error in validation_errors:
+                st.error(error.replace("⚠️ ", ""))
+    
 
-def tab_advanced_collection():
-    """Tab 2: 🔍 상세수집"""
-    st.header("🔍 상세 수집")
-    st.warning("🚧 2차 구현 예정 - 향후 업데이트")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.info("📝 **향후 추가 기능**")
-        st.write("- 층수별 세부 필터링")
-        st.write("- 주차/역세권 정보 수집") 
-        st.write("- 개별 매물 상세 분석")
-        st.write("- 커스텀 스크래핑 조건")
-    
-    with col2:
-        st.info("🎯 **예상 개발 일정**")
-        st.write("- Phase 1: 층수 필터 (1주)")
-        st.write("- Phase 2: 부가정보 수집 (2주)")
-        st.write("- Phase 3: 고급 분석 (1주)")
-    
-    # 플레이스홀더 버튼
-    st.button("🚧 준비 중...", disabled=True)
 
 def tab_results():
     """Tab 3: 📊 결과"""
@@ -1276,19 +1033,16 @@ def main():
     with col3:
         st.info("🎯 **범위 설정**")
     
-    # 4개 탭 구성
-    tab1, tab2, tab3, tab4 = st.tabs(["🚀 수집", "🔍 상세수집", "📊 결과", "📈 통계"])
+    # 3개 탭 구성
+    tab1, tab2, tab3 = st.tabs(["🚀 수집", "📊 결과", "📈 통계"])
     
     with tab1:
         tab_collection()
     
     with tab2:
-        tab_advanced_collection()
-    
-    with tab3:
         tab_results()
     
-    with tab4:
+    with tab3:
         tab_statistics()
     
     # 푸터
