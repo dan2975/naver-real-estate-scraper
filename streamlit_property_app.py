@@ -994,28 +994,34 @@ def tab_results():
         
         st.info("💡 좌우 스크롤하여 모든 데이터를 확인할 수 있습니다")
         
-        # DB 컬럼 순서대로 정렬 (25개 전체)
+        # DB 칼럼 순서대로 정렬 (52개 전체)
         db_column_order = [
             'id', 'region', 'district', 'building_name', 'full_address',
-            'area_sqm', 'area_pyeong', 'floor', 'total_floors', 'floor_display', 
+            'area_sqm', 'area_pyeong', 'exclusive_area_sqm', 'exclusive_area_pyeong',
+            'contract_area_sqm', 'contract_area_pyeong', 'floor', 'total_floors', 'floor_display',
             'deposit', 'monthly_rent', 'management_fee', 'total_monthly_cost', 'ceiling_height',
             'parking_available', 'near_station', 'build_year', 'naver_link',
-            'data_source', 'score', 'labels', 'collected_at', 'raw_text', 'created_at'
+            'data_source', 'score', 'labels', 'collected_at', 'raw_text', 'created_at',
+            'lat', 'lng', 'loan_status', 'build_year_from_tags', 'build_year_to_tags',
+            'station_distance', 'station_name', 'facilities', 'usage_type', 'conditions',
+            'price_quality', 'broker_name', 'broker_company', 'floor_detail',
+            'parking_available_from_tags', 'management_fee_from_tags', 'management_fee_to_tags',
+            'direction', 'flr_info', 'dtl_addr', 'cpNm', 'rltrNm', 'tagList'
         ]
         
         # 표시 모드에 따른 컬럼 선택
         if display_mode == "핵심 컬럼만":
             # 핵심 컬럼만 선택 (사용자 친화적)
             core_columns = [
-                'id', 'district', 'deposit', 'monthly_rent', 'area_pyeong', 
+                'id', 'district', 'deposit', 'monthly_rent', 'area_pyeong',
                 'floor_display', 'building_name', 'data_source', 'naver_link', 'collected_at'
             ]
             selected_order = core_columns
             st.caption("📌 핵심 10개 컬럼만 표시")
         else:
-            # 전체 25개 컬럼
+            # 전체 52개 컬럼
             selected_order = db_column_order
-            st.caption("📌 전체 25개 컬럼 표시")
+            st.caption("📌 전체 52개 컬럼 표시")
         
         # 실제 존재하는 컬럼만 선택
         available_columns = [col for col in selected_order if col in filtered_df.columns]
@@ -1024,7 +1030,7 @@ def tab_results():
         if missing_columns:
             st.caption(f"⚠️ 누락된 컬럼: {', '.join(missing_columns)}")
         
-        # 한글 컬럼명 매핑 (25개 전체)
+        # 한글 컬럼명 매핑 (52개 전체)
         column_config = {
             'id': st.column_config.NumberColumn('ID', width="small"),
             'region': '지역',
@@ -1033,6 +1039,10 @@ def tab_results():
             'full_address': '주소',
             'area_sqm': st.column_config.NumberColumn('면적(㎡)', format="%.1f"),
             'area_pyeong': st.column_config.NumberColumn('면적(평)', format="%.1f"),
+            'exclusive_area_sqm': st.column_config.NumberColumn('전용면적(㎡)', format="%.1f"),
+            'exclusive_area_pyeong': st.column_config.NumberColumn('전용면적(평)', format="%.1f"),
+            'contract_area_sqm': st.column_config.NumberColumn('계약면적(㎡)', format="%.1f"),
+            'contract_area_pyeong': st.column_config.NumberColumn('계약면적(평)', format="%.1f"),
             'floor': st.column_config.NumberColumn('층수'),
             'total_floors': st.column_config.NumberColumn('총층수'),
             'floor_display': '층수정보',
@@ -1050,7 +1060,30 @@ def tab_results():
             'labels': '라벨',
             'collected_at': st.column_config.DatetimeColumn('수집일시'),
             'raw_text': st.column_config.TextColumn('원시데이터', width="large"),
-            'created_at': st.column_config.DatetimeColumn('생성일시')
+            'created_at': st.column_config.DatetimeColumn('생성일시'),
+            'lat': st.column_config.NumberColumn('위도', format="%.6f"),
+            'lng': st.column_config.NumberColumn('경도', format="%.6f"),
+            'loan_status': '융자금상태',
+            'build_year_from_tags': st.column_config.NumberColumn('건축년도(부터)'),
+            'build_year_to_tags': st.column_config.NumberColumn('건축년도(까지)'),
+            'station_distance': st.column_config.NumberColumn('역까지거리(분)'),
+            'station_name': '역세권정보',
+            'facilities': '시설정보',
+            'usage_type': '용도정보',
+            'conditions': '조건정보',
+            'price_quality': '가격품질',
+            'broker_name': '중개사명',
+            'broker_company': '중개업소명',
+            'floor_detail': '층수상세',
+            'parking_available_from_tags': st.column_config.CheckboxColumn('주차가능(태그)'),
+            'management_fee_from_tags': st.column_config.NumberColumn('관리비(부터)'),
+            'management_fee_to_tags': st.column_config.NumberColumn('관리비(까지)'),
+            'direction': '방향',
+            'flr_info': '층수정보',
+            'dtl_addr': '상세주소',
+            'cpNm': '공인중개사',
+            'rltrNm': '중개업소',
+            'tagList': '태그목록'
         }
         
         # 컬럼 개수 표시
