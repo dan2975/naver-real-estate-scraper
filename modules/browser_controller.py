@@ -20,13 +20,46 @@ class BrowserController:
         # 기본 네이버 지도 URL (필터 적용된 상태)
         self.base_map_url = "https://m.land.naver.com/map/37.5665:126.9780:12/SG:SMS/B2?wprcMax=2000&rprcMax=130&spcMin=66&flrMin=-1&flrMax=2"
         
-        # 구별 좌표 정보
+        # 서울시 25개 구별 좌표 (인접 지역 10% 겹침 허용 - 매물 누락 최소화)
         self.seoul_districts_coords = {
-            '강남구': {'lat': 37.517, 'lon': 127.047},
-            '강서구': {'lat': 37.551, 'lon': 126.849},
-            '영등포구': {'lat': 37.526, 'lon': 126.896},
-            '구로구': {'lat': 37.495, 'lon': 126.887},
-            '마포구': {'lat': 37.566, 'lon': 126.901}
+            # 강남 3구 (10-15% 겹침 허용으로 매물 누락 최소화)
+            '강남구': {'lat': 37.516, 'lon': 127.055, 'btm': 37.485, 'lft': 127.030, 'top': 37.550, 'rgt': 127.085},
+            '서초구': {'lat': 37.485, 'lon': 127.015, 'btm': 37.455, 'lft': 126.980, 'top': 37.515, 'rgt': 127.050},
+            '송파구': {'lat': 37.515, 'lon': 127.115, 'btm': 37.485, 'lft': 127.090, 'top': 37.545, 'rgt': 127.145},
+            
+            # 강동 지역 (10% 겹침 허용)
+            '강동구': {'lat': 37.545, 'lon': 127.135, 'btm': 37.520, 'lft': 127.115, 'top': 37.570, 'rgt': 127.155},
+            '광진구': {'lat': 37.555, 'lon': 127.085, 'btm': 37.535, 'lft': 127.065, 'top': 37.575, 'rgt': 127.105},
+            '성동구': {'lat': 37.560, 'lon': 127.045, 'btm': 37.540, 'lft': 127.025, 'top': 37.580, 'rgt': 127.065},
+            
+            # 동북 지역 (10% 겹침 허용)
+            '동대문구': {'lat': 37.585, 'lon': 127.045, 'btm': 37.565, 'lft': 127.025, 'top': 37.605, 'rgt': 127.065},
+            '중랑구': {'lat': 37.605, 'lon': 127.080, 'btm': 37.585, 'lft': 127.060, 'top': 37.625, 'rgt': 127.100},
+            '성북구': {'lat': 37.595, 'lon': 127.015, 'btm': 37.575, 'lft': 126.995, 'top': 37.615, 'rgt': 127.035},
+            '강북구': {'lat': 37.625, 'lon': 127.025, 'btm': 37.605, 'lft': 127.005, 'top': 37.645, 'rgt': 127.045},
+            '도봉구': {'lat': 37.665, 'lon': 127.035, 'btm': 37.645, 'lft': 127.015, 'top': 37.685, 'rgt': 127.055},
+            '노원구': {'lat': 37.645, 'lon': 127.075, 'btm': 37.615, 'lft': 127.055, 'top': 37.675, 'rgt': 127.095},
+            
+            # 서북 지역 (10% 겹침 허용)
+            '은평구': {'lat': 37.605, 'lon': 126.925, 'btm': 37.585, 'lft': 126.905, 'top': 37.625, 'rgt': 126.945},
+            '서대문구': {'lat': 37.575, 'lon': 126.945, 'btm': 37.555, 'lft': 126.925, 'top': 37.595, 'rgt': 126.965},
+            '마포구': {'lat': 37.565, 'lon': 126.915, 'btm': 37.545, 'lft': 126.895, 'top': 37.585, 'rgt': 126.935},
+            
+            # 중심 지역 (10% 겹침 허용)
+            '종로구': {'lat': 37.585, 'lon': 126.985, 'btm': 37.565, 'lft': 126.965, 'top': 37.605, 'rgt': 127.005},
+            '중구': {'lat': 37.565, 'lon': 126.985, 'btm': 37.545, 'lft': 126.965, 'top': 37.585, 'rgt': 127.005},
+            '용산구': {'lat': 37.535, 'lon': 126.975, 'btm': 37.515, 'lft': 126.955, 'top': 37.555, 'rgt': 126.995},
+            
+            # 서남 지역 (10% 겹침 허용)
+            '강서구': {'lat': 37.565, 'lon': 126.825, 'btm': 37.545, 'lft': 126.805, 'top': 37.585, 'rgt': 126.845},
+            '양천구': {'lat': 37.525, 'lon': 126.845, 'btm': 37.505, 'lft': 126.825, 'top': 37.545, 'rgt': 126.865},
+            '구로구': {'lat': 37.485, 'lon': 126.865, 'btm': 37.465, 'lft': 126.845, 'top': 37.505, 'rgt': 126.885},
+            '금천구': {'lat': 37.465, 'lon': 126.905, 'btm': 37.445, 'lft': 126.885, 'top': 37.485, 'rgt': 126.925},
+            '영등포구': {'lat': 37.525, 'lon': 126.915, 'btm': 37.505, 'lft': 126.895, 'top': 37.545, 'rgt': 126.935},
+            
+            # 남부 지역 (10% 겹침 허용)
+            '동작구': {'lat': 37.495, 'lon': 126.965, 'btm': 37.475, 'lft': 126.945, 'top': 37.515, 'rgt': 126.985},
+            '관악구': {'lat': 37.475, 'lon': 126.945, 'btm': 37.455, 'lft': 126.925, 'top': 37.495, 'rgt': 126.965}
         }
     
     async def create_mobile_context(self, playwright):
@@ -219,14 +252,29 @@ class BrowserController:
                 except:
                     continue
             
-            # URL 해시로 목록 모드 강제 활성화
-            current_url = page.url
-            if '#mapFullList' not in current_url:
-                new_url = current_url + '#mapFullList'
-                await page.goto(new_url)
-                await asyncio.sleep(2)
-                print(f"         ✅ 목록 모드 활성화")
+            # JavaScript로 목록 모드 활성화 (더 안전한 방법)
+            try:
+                # 목록 모드 JavaScript 실행
+                await page.evaluate("""
+                    // 목록 모드로 전환하는 다양한 시도
+                    if (window.location.hash !== '#mapFullList') {
+                        window.location.hash = '#mapFullList';
+                    }
+                    
+                    // 목록 관련 버튼이나 요소 클릭 시도
+                    const listButtons = document.querySelectorAll('[data-nclicks*="list"], button[class*="list"], a[class*="list"]');
+                    for (let btn of listButtons) {
+                        if (btn.textContent.includes('목록')) {
+                            btn.click();
+                            break;
+                        }
+                    }
+                """)
+                await asyncio.sleep(3)
+                print(f"         ✅ 목록 모드 활성화 (JavaScript)")
                 return True
+            except:
+                pass
             
             return True
             

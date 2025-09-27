@@ -208,6 +208,13 @@ class PropertyDataProcessor:
                         station_keywords = ['역', '지하철', '분거리', '역세권', '호선']
                         row['near_station'] = any(keyword in desc for keyword in station_keywords)
                     
+                    # 🎯 좌표 정보 저장
+                    lat = raw_data.get('lat', 0)
+                    lng = raw_data.get('lng', 0)
+                    if lat and lng:
+                        row['lat'] = float(lat)
+                        row['lng'] = float(lng)
+                    
                     # 상세주소 보완 (dtlAddr 우선, 없으면 지역구 + 좌표 정보)
                     if pd.isna(row.get('full_address', '')) or row.get('full_address', '') == '':
                         dtl_addr = raw_data.get('dtlAddr', '')
@@ -216,8 +223,6 @@ class PropertyDataProcessor:
                         else:
                             # 지역구 + 좌표로 대략적 주소 생성
                             district = row.get('district', '')
-                            lat = raw_data.get('lat', '')
-                            lng = raw_data.get('lng', '')
                             if district and lat and lng:
                                 row['full_address'] = f"서울특별시 {district} (위도: {lat}, 경도: {lng})"
                     
@@ -258,6 +263,17 @@ class PropertyDataProcessor:
                     if 'full_address' not in db_df.columns:
                         db_df['full_address'] = ''
                     db_df.at[idx, 'full_address'] = parsed_row['full_address']
+                
+                # 🎯 좌표 데이터 적용
+                if 'lat' in parsed_row:
+                    if 'lat' not in db_df.columns:
+                        db_df['lat'] = 0.0
+                    db_df.at[idx, 'lat'] = parsed_row['lat']
+                
+                if 'lng' in parsed_row:
+                    if 'lng' not in db_df.columns:
+                        db_df['lng'] = 0.0
+                    db_df.at[idx, 'lng'] = parsed_row['lng']
         
         # 기본값 설정 (파싱되지 않은 컬럼들)
         db_df['region'] = '서울특별시'
@@ -523,7 +539,10 @@ class PropertyDataProcessor:
                 else:
                     stats['error_count'] += 1
             
-            print(f"✅ UPSERT 완료: 신규 {stats['new_count']}개, 업데이트 {stats['updated_count']}개, 오류 {stats['error_count']}개")
+            if stats['error_count'] > 0:
+                print(f"✅ UPSERT 완료: 신규 {stats['new_count']}개, 업데이트 {stats['updated_count']}개, ⚠️ 오류 {stats['error_count']}개")
+            else:
+                print(f"✅ UPSERT 완료: 신규 {stats['new_count']}개, 업데이트 {stats['updated_count']}개")
             
             return stats
             
