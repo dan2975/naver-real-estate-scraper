@@ -126,7 +126,7 @@ def load_property_data():
 def load_database_data():
     """데이터베이스에서 매물 데이터 로드"""
     try:
-        from data_processor import PropertyDataProcessor
+        from modules.data_processor import PropertyDataProcessor
         processor = PropertyDataProcessor()
         
         # DB 매물 개수 확인
@@ -876,7 +876,7 @@ def tab_results():
         # DB → CSV 내보내기 (백업용)
         if st.button("📥 CSV 백업"):
             try:
-                from data_processor import PropertyDataProcessor
+                from modules.data_processor import PropertyDataProcessor
                 processor = PropertyDataProcessor()
                 db_df = processor.get_all_properties_from_db()
                 if not db_df.empty:
@@ -895,7 +895,7 @@ def tab_results():
     # 🔍 DB 상태 디버그 정보
     with st.expander("🔍 디버그 정보"):
         try:
-            from data_processor import PropertyDataProcessor
+            from modules.data_processor import PropertyDataProcessor
             processor = PropertyDataProcessor()
             db_count = processor.get_properties_count()
             st.write(f"📊 실제 DB 매물 수: {db_count}개")
@@ -1111,10 +1111,49 @@ def tab_results():
         
         # 전체 데이터프레임 표시 (가로 스크롤)
         st.dataframe(
-            filtered_df[available_columns], 
+            filtered_df[available_columns],
             height=400,  # 세로 스크롤 지원
-            column_config=column_config
+            column_config=column_config,
+            use_container_width=True,  # 가로 너비 꽉 차게
+            hide_index=True  # 인덱스 숨김
         )
+
+        # 추가: 모든 컬럼을 볼 수 있는 HTML 테이블 (필요시)
+        with st.expander("📋 전체 컬럼 HTML 뷰 (개발용)"):
+            # HTML로 모든 컬럼 표시
+            html_table = filtered_df[available_columns].to_html(
+                index=False,
+                classes="table table-striped",
+                justify="left",
+                table_id="full_property_table"
+            )
+
+            # CSS 스타일 추가
+            st.markdown("""
+            <style>
+            #full_property_table {
+                width: 100%;
+                font-size: 12px;
+                border-collapse: collapse;
+            }
+            #full_property_table th, #full_property_table td {
+                padding: 4px 8px;
+                border: 1px solid #ddd;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 120px;
+            }
+            #full_property_table th {
+                background-color: #f8f9fa;
+                position: sticky;
+                top: 0;
+                z-index: 1;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+
+            st.markdown(html_table, unsafe_allow_html=True)
         
         # 다운로드 버튼
         csv = filtered_df.to_csv(index=False, encoding='utf-8-sig')

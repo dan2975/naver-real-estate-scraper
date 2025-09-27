@@ -10,7 +10,7 @@ import asyncio
 import pandas as pd
 from datetime import datetime
 from playwright.async_api import async_playwright
-from data_processor import PropertyDataProcessor
+from modules.data_processor import PropertyDataProcessor
 import re
 import requests
 import time

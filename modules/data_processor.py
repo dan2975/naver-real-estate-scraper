@@ -22,7 +22,7 @@ class PropertyDataProcessor:
         # 🎯 CSV ↔ DB 컬럼 매핑
         self.csv_to_db_mapping = {
             'district': 'district',
-            'property_type': 'data_source',  # property_type을 data_source로 매핑
+            'property_type': None,  # district_collector에서 직접 data_source 제공
             'deposit': 'deposit',
             'monthly_rent': 'monthly_rent',
             'area_sqm': 'area_sqm',
@@ -40,7 +40,16 @@ class PropertyDataProcessor:
             'jibun_address': None,  # DB에 저장하지 않음
             'naver_link': 'naver_link',
             'article_no': None,  # raw_text에 포함
-            'raw_data': 'raw_text'
+            'raw_data': 'raw_text',
+            # ✅ district_collector에서 추가하는 필드들 매핑
+            'raw_text': 'raw_text',  # district_collector의 raw_text
+            'data_source': 'data_source',  # district_collector의 data_source
+            'collected_at': 'collected_at',  # 수집 시간
+            'article_id': None,  # DB 컬럼이 없으므로 무시 (필요시 추가)
+            'cortar_no': None,  # DB 컬럼이 없으므로 무시 (필요시 추가)
+            'meets_conditions': None,  # DB 컬럼이 없으므로 무시 (필요시 추가)
+            'trade_type': None,  # DB 컬럼이 없으므로 무시
+            'region': 'region'  # 지역 정보
         }
         
         self.ensure_data_directory()
@@ -288,19 +297,38 @@ class PropertyDataProcessor:
         elif 'jibun_address' in csv_df.columns:
             db_df['full_address'] = csv_df['jibun_address'].fillna('')
         
-        # raw_data에서 추가 정보 파싱
-        if 'raw_data' in csv_df.columns:
+        # raw_text 또는 raw_data에서 추가 정보 파싱
+        raw_column = None
+        if 'raw_text' in csv_df.columns:
+            raw_column = 'raw_text'
+        elif 'raw_data' in csv_df.columns:
+            raw_column = 'raw_data'
+        
+        if raw_column:
             def parse_raw_data(row):
                 try:
-                    if pd.isna(row['raw_data']) or row['raw_data'] == '':
+                    if pd.isna(row[raw_column]) or row[raw_column] == '':
                         return row
                     
-                    # Python dict 파싱 (JSON이 아님)
-                    if isinstance(row['raw_data'], str):
+                    # Python dict 파싱 (문자열 형태로 저장된 경우)
+                    if isinstance(row[raw_column], dict):
+                        raw_data = row[raw_column]
+                    elif isinstance(row[raw_column], str) and row[raw_column]:
                         import ast
-                        raw_data = ast.literal_eval(row['raw_data'])
+                        try:
+                            # 문자열을 dict로 변환 시도
+                            raw_data = ast.literal_eval(row[raw_column])
+                        except (ValueError, SyntaxError):
+                            # ast.literal_eval 실패시 JSON으로 시도
+                            import json
+                            try:
+                                raw_data = json.loads(row[raw_column])
+                            except (json.JSONDecodeError, TypeError):
+                                # 둘 다 실패시 빈 dict로 처리
+                                print(f"⚠️ {raw_column} 파싱 실패: {row[raw_column][:100]}...")
+                                raw_data = {}
                     else:
-                        raw_data = row['raw_data']
+                        raw_data = row[raw_column] if row[raw_column] else {}
                     
                     # 관리비 파싱 (minMviFee, maxMviFee)
                     min_fee = raw_data.get('minMviFee', 0)
@@ -637,7 +665,7 @@ class PropertyDataProcessor:
             current_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             if existing:
-                # 업데이트
+                # 📝 일반적인 UPSERT: 무조건 덮어쓰기
                 existing_id, old_collected_at = existing
                 property_data['collected_at'] = current_time_str
                 

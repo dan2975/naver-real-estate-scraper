@@ -4,7 +4,7 @@
 최신 CSV 데이터를 DB로 가져오기
 """
 
-from data_processor import PropertyDataProcessor
+from modules.data_processor import PropertyDataProcessor
 import os
 
 def main():

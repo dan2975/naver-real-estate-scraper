@@ -12,7 +12,7 @@ import re
 import requests
 from datetime import datetime
 from playwright.async_api import async_playwright
-from data_processor import PropertyDataProcessor
+from modules.data_processor import PropertyDataProcessor
 
 class AccurateDistrictScraper:
     def __init__(self):

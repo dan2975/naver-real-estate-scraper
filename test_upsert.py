@@ -4,7 +4,7 @@
 """
 
 import pandas as pd
-from data_processor import PropertyDataProcessor
+from modules.data_processor import PropertyDataProcessor
 from datetime import datetime
 
 def test_upsert_system():

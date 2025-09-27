@@ -20,7 +20,7 @@ from modules.stealth_manager import StealthManager
 from modules.browser_controller import BrowserController
 from modules.api_collector import APICollector
 from modules.property_parser import PropertyParser
-from data_processor import PropertyDataProcessor
+from modules.data_processor import PropertyDataProcessor
 
 # 진행률 관리자 임포트
 try:
@@ -205,25 +205,46 @@ class DistrictCollector:
             return None
     
     def enhance_and_validate_data(self, properties: List[Dict[str, Any]], district_name: str) -> List[Dict[str, Any]]:
-        """✨ 3단계: 데이터 향상 및 검증"""
-        print(f"         ✨ 3단계: {district_name} 데이터 향상 및 검증...")
-        
-        enhanced_properties = []
-        
-        for prop in properties:
-            try:
-                # 이전 성공 코드와 동일하게 원본 데이터 그대로 사용 (PropertyParser 비활성화)
-                enhanced_properties.append(prop)
-                
-            except Exception as e:
-                print(f"            ⚠️ 매물 처리 오류: {e}")
-                # 원본 데이터라도 포함
-                enhanced_properties.append(prop)
-        
-        # 배치 분석 (이전 성공 코드와 동일하게 비활성화)
-        print(f"            📊 분석 결과: {len(enhanced_properties)}개 매물 수집 완료")
-        
-        return enhanced_properties
+        """✨ 3단계: data_processor를 통한 데이터 향상 및 검증"""
+        print(f"         ✨ 3단계: {district_name} data_processor 파싱 및 검증...")
+
+        if not properties:
+            return []
+
+        try:
+            # API 데이터를 DataFrame으로 변환
+            df = pd.DataFrame(properties)
+            print(f"            📊 API 데이터 DataFrame 변환: {len(df)}개")
+
+            # 지역 정보 먼저 추가 (파싱 전에 필요)
+            df_with_district = df.copy()
+            df_with_district['district'] = district_name
+            df_with_district['region'] = '서울특별시'
+
+            # data_processor를 통한 상세 파싱
+            enhanced_df = self.data_processor.csv_to_db_dataframe(df_with_district)
+            print(f"            ✅ 파싱 완료: {len(enhanced_df)}개 매물")
+
+            # 지역 정보 확인 (파싱 후에도 유지되는지 확인)
+            print(f"            📍 파싱 후 지역: {enhanced_df['district'].iloc[0] if len(enhanced_df) > 0 else 'N/A'}")
+
+            # 기본값 설정
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            enhanced_df['collected_at'] = current_time
+            enhanced_df['created_at'] = current_time
+            enhanced_df['score'] = 0
+            enhanced_df['labels'] = ''
+
+            # DataFrame을 딕셔너리 리스트로 변환
+            enhanced_properties = enhanced_df.to_dict('records')
+
+            print(f"            📊 향상된 매물: {len(enhanced_properties)}개")
+            return enhanced_properties
+
+        except Exception as e:
+            print(f"            ⚠️ 파싱 오류: {e}")
+            # 오류 발생 시 원본 데이터라도 반환
+            return properties
     
     async def finalize_results(self, all_properties: List[Dict[str, Any]]) -> None:
         """📊 4단계: 최종 결과 분석 및 저장"""
@@ -365,8 +386,10 @@ class DistrictCollector:
         # 네트워크 요청 모니터링
         api_requests = []
         all_properties = []
+        total_property_count = 0  # 전체 매물 수 (totCnt에서 추출)
         
         def handle_response(response):
+            nonlocal total_property_count
             # 더 넓은 범위의 API 요청 감지
             if any(keyword in response.url for keyword in ['article', 'atcl', 'ajax', 'cluster', 'list', 'land', 'm.land']):
                 api_requests.append({
@@ -375,6 +398,14 @@ class DistrictCollector:
                     'timestamp': asyncio.get_event_loop().time()
                 })
                 print(f'🌐 API 발견: {response.status} {response.url}')
+                
+                # totCnt 추출 (전체 매물 수)
+                if 'totCnt=' in response.url:
+                    import re
+                    match = re.search(r'totCnt=(\d+)', response.url)
+                    if match and total_property_count == 0:
+                        total_property_count = int(match.group(1))
+                        print(f'🎯 전체 매물 수 감지: {total_property_count}개')
                 
                 # 매물 관련 API인지 추가 확인
                 if any(keyword in response.url for keyword in ['articleList', 'cluster', 'ajax']):
@@ -440,40 +471,80 @@ class DistrictCollector:
         
         # 무한 스크롤하면서 네트워크 모니터링
         no_new_data_count = 0  # 연속으로 새 데이터가 없는 횟수
-        
+        max_scroll_attempts = 100  # 최대 스크롤 시도 횟수
+
         i = 0
-        while True:  # 무한 루프 (조건으로 종료)
-            print(f'            --- 스크롤 {i+1} ---')
-            
+        while i < max_scroll_attempts:  # 무한 루프 대신 제한된 횟수로 변경
+            print(f'            --- 스크롤 {i+1}/{max_scroll_attempts} ---')
+
             # 스크롤 전 상태
             before_articles = await page.query_selector_all('a[href*="article"]')
             before_count = len(before_articles)
             before_requests = len(api_requests)
             before_properties = len(all_properties)
-            
-            # 스크롤 실행 (5000px씩 내림)
-            await page.evaluate('window.scrollBy(0, 5000)')
+
+            # 페이지의 전체 높이 확인
+            scroll_height = await page.evaluate('document.body.scrollHeight')
+            current_scroll_y = await page.evaluate('window.scrollY')
+
+            print(f'              현재 스크롤 위치: {current_scroll_y}px / 전체 높이: {scroll_height}px')
+
+            # 🚀 강화된 스크롤 방법 (20000px씩 대폭 스크롤)
+            # 스크롤 실행 (20000px씩 내림)
+            await page.evaluate('window.scrollBy(0, 20000)')
             await asyncio.sleep(2)  # 로딩 대기
-            
+
             # 스크롤 후 상태
             after_articles = await page.query_selector_all('a[href*="article"]')
             after_count = len(after_articles)
             after_requests = len(api_requests)
             
+            # 🔧 스크롤이 안 되면 다른 방법 시도 (이전 성공 코드)
+            scroll_y = await page.evaluate('window.scrollY')
+            if scroll_y == current_scroll_y:  # 스크롤 위치가 변하지 않았다면
+                print('              ❌ 스크롤 안됨, 다른 방법 시도...')
+                
+                # 방법 1: 키보드 스크롤
+                await page.keyboard.press('PageDown')
+                await asyncio.sleep(1)
+                
+                # 방법 2: 마우스 휠 (강화)
+                await page.mouse.wheel(0, 15000)
+                await asyncio.sleep(1)
+                
+                # 방법 3: 강제 스크롤 (강화)
+                await page.evaluate('window.scrollTo(0, 20000)')
+                await asyncio.sleep(1)
+                
+                new_scroll_y = await page.evaluate('window.scrollY')
+                print(f'              강제 스크롤 후: {new_scroll_y}px')
+
             print(f'              매물: {before_count} → {after_count}개')
             print(f'              API 요청: {before_requests} → {after_requests}개')
             print(f'              수집된 매물 데이터: {len(all_properties)}개')
             
+            # 전체 매물 수집 진행률 표시
+            if total_property_count > 0:
+                progress_percent = (len(all_properties) / total_property_count) * 100
+                print(f'              📊 수집 진행률: {len(all_properties)}/{total_property_count}개 ({progress_percent:.1f}%)')
+
             # 새로운 API 요청이 있으면 데이터 추출 (실시간 처리로 대체)
             if after_requests > before_requests:
                 print(f'              ✅ 새로운 API 요청 {after_requests - before_requests}개! (실시간 처리됨)')
-                
+
                 # 실시간 처리된 데이터 확인
                 print(f'              📊 현재까지 수집된 매물: {len(all_properties)}개')
-                
+
                 # API 요청이 있으면 새 데이터가 있다는 의미이므로 카운터 리셋
                 no_new_data_count = 0
-            
+                
+                # API 요청이 계속 들어오면 더 적극적으로 스크롤
+                if len(all_properties) > before_properties:
+                    print(f'              🚀 새 매물 데이터 감지! 적극적 스크롤 계속...')
+                    # 추가 시도를 위해 여기서 스크롤 한번 더 (강화)
+                    await page.evaluate('window.scrollBy(0, 15000)')
+                    await asyncio.sleep(1)
+
             # 매물이 로딩되면 계속
             if after_count > before_count:
                 print(f'              🎉 매물 로딩 성공! {after_count - before_count}개 추가')
@@ -481,48 +552,45 @@ class DistrictCollector:
             else:
                 no_new_data_count += 1
                 print(f'              ❌ 매물 로딩 없음 (연속 {no_new_data_count}번)')
+
+            # 페이지 끝 감지 (스크롤이 실제로 작동할 때만)
+            current_height = await page.evaluate('document.body.scrollHeight')
+            current_scroll = await page.evaluate('window.scrollY')
             
-            # 스크롤이 안 되면 다른 방법 시도 (작동하는 방식)
-            scroll_y = await page.evaluate('window.scrollY')
-            if scroll_y == 0:
-                print('              ❌ 스크롤 안됨, 다른 방법 시도...')
-                
-                # 방법 1: 키보드 스크롤
-                await page.keyboard.press('PageDown')
-                await asyncio.sleep(1)
-                
-                # 방법 2: 마우스 휠
-                await page.mouse.wheel(0, 2000)
-                await asyncio.sleep(1)
-                
-                # 방법 3: 강제 스크롤
-                await page.evaluate('window.scrollTo(0, 5000)')
-                await asyncio.sleep(1)
-                
-                new_scroll_y = await page.evaluate('window.scrollY')
-                print(f'              강제 스크롤 후: {new_scroll_y}px')
-                
-                # 강제 스크롤 후 매물 개수 확인
-                force_articles = await page.query_selector_all('a[href*="article"]')
-                force_count = len(force_articles)
-                print(f'              강제 스크롤 후 매물: {force_count}개')
-                
-                if force_count > after_count:
-                    print(f'              🎉 강제 스크롤로 매물 로딩 성공! {force_count - after_count}개 추가')
-                    no_new_data_count = 0  # 강제 스크롤 성공 시 리셋
-            
-            # 연속으로 새 데이터가 없으면 중단
-            if no_new_data_count >= 20:  # 20번 연속으로 새 데이터 없으면 중단
-                print(f'              ⏹️ 연속 20번 새 데이터 없음, 중단')
+            # 스크롤이 실제로 작동하고 있을 때만 페이지 끝 감지
+            if current_scroll > 100:  # 스크롤이 실제로 움직였을 때만
+                if current_scroll + await page.evaluate('window.innerHeight') >= current_height - 500:
+                    print(f'              📍 페이지 끝 근처 도달: {current_scroll}px / {current_height}px')
+                    # 끝에 도달해도 몇 번 더 시도
+                    if no_new_data_count >= 5:  # 더 많이 시도
+                        break
+            else:
+                print(f'              🔄 스크롤 위치가 낮음 ({current_scroll}px), 페이지 끝 감지 무시')
+
+            # 🎯 전체 매물 수집 완료 확인 (최우선)
+            if total_property_count > 0 and len(all_properties) >= total_property_count * 0.95:  # 95% 이상 수집
+                print(f'              🎉 전체 매물 수집 완료! {len(all_properties)}/{total_property_count}개 ({len(all_properties)/total_property_count*100:.1f}%)')
                 break
             
+            # 연속으로 새 데이터가 없으면 중단 (전체 매물 수가 알려진 경우 더 관대하게)
+            max_attempts = 50 if total_property_count > 0 else 30  # 전체 수를 알면 더 많이 시도
+            if no_new_data_count >= 15 and i <= 30:  # 처음 30번 중에 15번 연속 실패하면 조기 중단
+                print(f'              ⏹️ 초기 수집 완료 (연속 {no_new_data_count}번), 중단')
+                break
+            elif no_new_data_count >= max_attempts:  # 동적 중단 조건
+                print(f'              ⏹️ 연속 {max_attempts}번 새 데이터 없음, 중단')
+                break
+
             # 너무 많은 매물이 수집되면 중단 (안전장치)
             if len(all_properties) >= 3000:  # 3000개 이상 수집되면 중단
                 print(f'              ⏹️ 3000개 이상 수집됨, 중단')
                 break
-            
+
             i += 1  # 스크롤 카운터 증가
-            await asyncio.sleep(1)
+
+            # 스크롤 간격 조정 (초기에는 빠르게, 나중에는 천천히)
+            sleep_time = 1.0 if i < 20 else 2.0
+            await asyncio.sleep(sleep_time)
         
         # 최종 결과
         final_articles = await page.query_selector_all('a[href*="article"]')
@@ -531,6 +599,17 @@ class DistrictCollector:
         print(f'              매물 링크: {len(final_articles)}개')
         print(f'              총 API 요청: {len(api_requests)}개')
         print(f'              총 수집된 매물 데이터: {len(all_properties)}개')
+        
+        # 전체 매물 수집 완성도 표시
+        if total_property_count > 0:
+            completion_percent = (len(all_properties) / total_property_count) * 100
+            print(f'              🎯 수집 완성도: {len(all_properties)}/{total_property_count}개 ({completion_percent:.1f}%)')
+            if completion_percent >= 95:
+                print(f'              ✅ 거의 완전 수집 달성!')
+            elif completion_percent >= 80:
+                print(f'              👍 양호한 수집률')
+            else:
+                print(f'              ⚠️ 추가 수집 필요')
         
         # 수집된 매물 데이터를 표준 형식으로 변환
         converted_properties = []
@@ -583,10 +662,17 @@ class DistrictCollector:
             floor_parts = floor_info.split('/')
             floor = int(floor_parts[0]) if floor_parts[0].isdigit() else 0
             
-            # 조건.md 필터링
-            if not self.meets_api_conditions(deposit, monthly_rent, area_pyeong, floor):
-                print(f"               ❌ 조건 불충족: {deposit}/{monthly_rent}만원, {area_pyeong}평, {floor}층")
-                return None
+            # 조건.md 필터링 비활성화 - 전체 매물 수집 우선
+            # if not self.meets_api_conditions(deposit, monthly_rent, area_pyeong, floor):
+            #     print(f"               ❌ 조건 불충족: {deposit}/{monthly_rent}만원, {area_pyeong}평, {floor}층")
+            #     return None
+            # 
+            # 대신 조건 부합 여부만 표시
+            meets_conditions = self.meets_api_conditions(deposit, monthly_rent, area_pyeong, floor)
+            if not meets_conditions:
+                print(f"               ℹ️ 참고: {deposit}/{monthly_rent}만원, {area_pyeong}평, {floor}층 (조건 외)")
+            else:
+                print(f"               ✅ 조건 부합: {deposit}/{monthly_rent}만원, {area_pyeong}평, {floor}층")
             
             # 네이버 링크 생성
             naver_link = f"https://m.land.naver.com/article/info/{article_no}" if article_no else ""
@@ -606,11 +692,12 @@ class DistrictCollector:
                 'property_type': property_type,
                 'trade_type': trade_type,
                 'naver_link': naver_link,
-                'raw_data': api_prop,
+                'raw_text': str(api_prop),  # ✅ data_processor가 찾는 raw_text 컬럼으로 저장
                 'data_source': 'infinite_scroll_api',
                 'collected_at': datetime.now().isoformat(),
                 'article_id': article_no,
-                'cortar_no': cortar_no  # 행정구역코드 추가
+                'cortar_no': cortar_no,  # 행정구역코드 추가
+                'meets_conditions': meets_conditions  # 조건 부합 여부 저장
             }
             
         except Exception as e:

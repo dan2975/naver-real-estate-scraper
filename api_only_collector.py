@@ -17,7 +17,7 @@ from typing import List, Dict, Any, Optional
 from modules.stealth_manager import StealthManager
 from modules.api_collector import APICollector
 from modules.property_parser import PropertyParser
-from data_processor import PropertyDataProcessor
+from modules.data_processor import PropertyDataProcessor
 
 # 진행률 관리자 임포트
 try:
